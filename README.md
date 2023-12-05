@@ -10,6 +10,11 @@ To use the solver, first install the package by cloning this repository, going t
 pip install .
 ```
 
+use without clone installation:
+```
+pip install git+https://github.com/m1balcerak/forwardFK_FDM.git
+```
+
 ## Usage
 
 Here's a basic example of how to use the solver:
