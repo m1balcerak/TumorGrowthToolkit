@@ -31,7 +31,7 @@ parameters = {
     'RatioDw_Dg': 1.5,  # Ratio of diffusion coefficients in white and grey matter
     'gm': gm_data,      # Grey matter data
     'wm': wm_data,      # White matter data
-    'NxT1_pct': 0.5,    # T1-weighted MRI scan parameters
+    'NxT1_pct': 0.5,    # initial focal position (in percentages)
     'NyT1_pct': 0.5,
     'NzT1_pct': 0.5
 }
