@@ -5,8 +5,7 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
-        'numpy',
-        'copy'
+        'numpy'
     ],
     author='Michal Balcerak',
     author_email='m1balcerak@gmail.com',
