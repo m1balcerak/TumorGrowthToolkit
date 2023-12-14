@@ -107,8 +107,8 @@ def restore_tumor(original_shape, tumor, crop_coords):
 
 def gauss_sol3d(x, y, z, scale=1.0):
     # Experimentally chosen
-    Dt = 15.0
-    M = 1500
+    Dt = 5.0
+    M = 250
     
     # Apply scaling to the coordinates
     x_scaled = x * scale
@@ -176,7 +176,7 @@ def solver(params):
     NzT1 = int(NzT1_pct * Nz)
 
     days = 100
-    Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*10 + 100 
+    Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100 
     print(Nt)
     dt = days/Nt
     N_simulation_steps = int(np.ceil(Nt))
@@ -185,8 +185,6 @@ def solver(params):
     A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,scale=1/res_factor))
     col_res = np.zeros([2, Nx, Ny, Nz])
     col_res[0] = copy.deepcopy(A) #init
-
-    
 
 
     
