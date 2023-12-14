@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+from scipy.ndimage import zoom
 
 def m_Tildas(WM,GM,th):
         
@@ -35,15 +36,22 @@ def FK_update(A,D_domain,f, dt,dx,dy,dz):
     A += diff_A
     return A
 
-def gauss_sol3d(x,y,z):
-    #experimentally chosen
+def gauss_sol3d(x, y, z, scale=1.0):
+    # Experimentally chosen
     Dt = 15.0
     M = 1500
     
-    gauss = M/np.power(4*np.pi * Dt,3/2) * np.exp(- (np.power(x,2) + np.power(y,2) + np.power(z,2))/(4*Dt))
-    gauss = np.where(gauss>0.1, gauss,0)
-    gauss = np.where(gauss>1, np.float64(1),gauss)
+    # Apply scaling to the coordinates
+    x_scaled = x * scale
+    y_scaled = y * scale
+    z_scaled = z * scale
+
+    gauss = M / np.power(4 * np.pi * Dt, 3/2) * np.exp(- (np.power(x_scaled, 2) + np.power(y_scaled, 2) + np.power(z_scaled, 2)) / (4 * Dt))
+    gauss = np.where(gauss > 0.1, gauss, 0)
+    gauss = np.where(gauss > 1, np.float64(1), gauss)
     return gauss
+
+
 
 
 def get_initial_configuration(Nx,Ny,Nz,NxT,NyT,NzT,r):
@@ -65,7 +73,9 @@ def solver(params):
     NxT1_pct = params['NxT1_pct']
     NyT1_pct = params['NyT1_pct']
     NzT1_pct = params['NzT1_pct']
-    
+    zoom_factor = params['resolution_factor']  # New parameter for resolution
+
+    # Validate input
     assert isinstance(sGM, np.ndarray), "sGM must be a numpy array"
     assert isinstance(sWM, np.ndarray), "sWM must be a numpy array"
     assert sGM.ndim == 3, "sGM must be a 3D numpy array"
@@ -75,46 +85,51 @@ def solver(params):
     assert 0 <= NyT1_pct <= 1, "NyT1_pct must be between 0 and 1"
     assert 0 <= NzT1_pct <= 1, "NzT1_pct must be between 0 and 1"
 
-    # update in time
-    days = 100
-    # grid size
-    Nx = sGM.shape[0]
-    Ny = sGM.shape[1]
-    Nz = sGM.shape[2]
+    # Interpolate tissue data to lower resolution
+    sGM_low_res = zoom(sGM, zoom_factor, order=1)  # Linear interpolation
+    sWM_low_res = zoom(sWM, zoom_factor, order=1)
+    
+    # Assuming sGM_low_res is already computed using scipy.ndimage.zoom
+    original_shape = sGM_low_res.shape
+    new_shape =  sGM.shape
+    
+    # Calculate the zoom factor for each dimension
+    extrapolate_factor = tuple(new_sz / float(orig_sz) for new_sz, orig_sz in zip(new_shape, original_shape))
 
-    # grid steps
-    dx =  1
-    dy =  1
-    dz =  1
+    # Update grid size and steps for low resolution
+    Nx, Ny, Nz = sGM_low_res.shape
+    dx = dy = dz = 1 / zoom_factor  # Adjust grid steps based on zoom factor
+
 
     # Calculate the absolute positions based on percentages
     NxT1 = int(NxT1_pct * Nx)
     NyT1 = int(NyT1_pct * Ny)
     NzT1 = int(NzT1_pct * Nz)
 
-    r = 1
-    Nt = days * 10 * np.power((Dw/0.05),1)
+    days = 100
+    Nt = days * 1 * np.power((Dw/0.05),1)
     dt = days/Nt
-
     N_simulation_steps = int(np.ceil(Nt))
 
-    yv, xv,zv = np.meshgrid(np.arange(0,sGM.shape[1]), np.arange(0,sGM.shape[0]),np.arange(0,sGM.shape[2]))
-    A = np.array(gauss_sol3d(xv - NxT1 ,yv - NyT1,zv-NzT1))
+    yv, xv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz))
+    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,scale=1/zoom_factor))
     col_res = np.zeros([2, Nx, Ny, Nz])
-    col_res[0] = copy.deepcopy(A)  # init
+    col_res[0] = copy.deepcopy(A) #init
+
     # Simulation code
-    D_domain = get_D(sWM, sGM, 0.1, Dw, RatioDw_Dg)
-        
+    D_domain = get_D(sWM_low_res, sGM_low_res, 0.1, Dw, RatioDw_Dg)
+
     result = {}
+    print(A.shape)
     try:
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
         col_res[1] = copy.deepcopy(A)  # final
-        
+
         # Save results in the result dictionary
-        result['initial_state'] = col_res[0]
-        result['final_state'] = col_res[1]
+        result['initial_state'] = zoom(col_res[0], extrapolate_factor, order=1)
+        result['final_state'] = zoom(col_res[1], extrapolate_factor, order=1)
         result['Dw'] = Dw
         result['rho'] = f
         result['success'] = True
