@@ -36,6 +36,75 @@ def FK_update(A,D_domain,f, dt,dx,dy,dz):
     A += diff_A
     return A
 
+import numpy as np
+
+def crop_tissues_and_tumor(GM, WM, tumor_initial, margin=2, threshold=0.05):
+    """
+    Crop GM, WM, and tumor_initial such that we remove the maximal amount of voxels
+    where the sum of GM and WM is lower than the threshold.
+    A margin is left around the tissues.
+
+    :param GM: 3D numpy array of gray matter
+    :param WM: 3D numpy array of white matter
+    :param tumor_initial: 3D numpy array of initial tumor
+    :param margin: Margin to leave around the tissues
+    :param threshold: Threshold to consider as no tissue
+    :return: Cropped GM, WM, tumor_initial, and the crop coordinates
+    """
+
+    # Combining GM and WM to find the region with tissue
+    tissue_sum = GM + WM
+
+    # Finding indices where the tissue sum is greater than or equal to the threshold
+    tissue_indices = np.argwhere(tissue_sum >= threshold)
+
+    # Finding the bounding box for cropping, considering the margin
+    min_coords = np.maximum(tissue_indices.min(axis=0) - margin, 0)
+    max_coords = np.minimum(tissue_indices.max(axis=0) + margin + 1, GM.shape)
+
+    # Cropping GM, WM, and tumor_initial
+    cropped_GM = GM[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+    cropped_WM = WM[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+    cropped_tumor_initial = tumor_initial[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+
+    return cropped_GM, cropped_WM, cropped_tumor_initial, (min_coords, max_coords)
+
+def restore_tumor(original_shape, tumor, crop_coords):
+    """
+    Restore the cropped tumor data back to the original resolution by filling
+    the rest of the space with empty voxels.
+
+    :param original_shape: Shape of the original GM/WM arrays
+    :param tumor: Cropped tumor 3D numpy array
+    :param crop_coords: Coordinates used for cropping (min_coords, max_coords)
+    :return: Restored tumor array with original resolution
+    """
+    restored_tumor = np.zeros(original_shape)
+    min_coords, max_coords = crop_coords
+
+    restored_tumor[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]] = tumor
+
+    return restored_tumor
+
+
+def restore_tumor(original_shape, tumor, crop_coords):
+    """
+    Restore the cropped tumor data back to the original resolution by filling
+    the rest of the space with empty voxels.
+
+    :param original_shape: Shape of the original GM/WM arrays
+    :param tumor: Cropped tumor 3D numpy array
+    :param crop_coords: Coordinates used for cropping (min_coords, max_coords)
+    :return: Restored tumor array with original resolution
+    """
+    restored_tumor = np.zeros(original_shape)
+    min_coords, max_coords = crop_coords
+
+    restored_tumor[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]] = tumor
+
+    return restored_tumor
+
+
 def gauss_sol3d(x, y, z, scale=1.0):
     # Experimentally chosen
     Dt = 15.0
@@ -73,7 +142,7 @@ def solver(params):
     NxT1_pct = params['NxT1_pct']
     NyT1_pct = params['NyT1_pct']
     NzT1_pct = params['NzT1_pct']
-    zoom_factor = params['resolution_factor']  # New parameter for resolution
+    res_factor = params['resolution_factor']  # New parameter for resolution
 
     # Validate input
     assert isinstance(sGM, np.ndarray), "sGM must be a numpy array"
@@ -86,8 +155,8 @@ def solver(params):
     assert 0 <= NzT1_pct <= 1, "NzT1_pct must be between 0 and 1"
 
     # Interpolate tissue data to lower resolution
-    sGM_low_res = zoom(sGM, zoom_factor, order=1)  # Linear interpolation
-    sWM_low_res = zoom(sWM, zoom_factor, order=1)
+    sGM_low_res = zoom(sGM, res_factor, order=1)  # Linear interpolation
+    sWM_low_res = zoom(sWM, res_factor, order=1)
     
     # Assuming sGM_low_res is already computed using scipy.ndimage.zoom
     original_shape = sGM_low_res.shape
@@ -98,7 +167,7 @@ def solver(params):
 
     # Update grid size and steps for low resolution
     Nx, Ny, Nz = sGM_low_res.shape
-    dx = dy = dz = 1 / zoom_factor  # Adjust grid steps based on zoom factor
+    dx = dy = dz = 1 / res_factor  # Adjust grid steps based on zoom factor
 
 
     # Calculate the absolute positions based on percentages
@@ -107,24 +176,35 @@ def solver(params):
     NzT1 = int(NzT1_pct * Nz)
 
     days = 100
-    Nt = days * 1 * np.power((Dw/0.05),1)
+    Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*10 + 100 
+    print(Nt)
     dt = days/Nt
     N_simulation_steps = int(np.ceil(Nt))
 
     yv, xv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz))
-    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,scale=1/zoom_factor))
+    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,scale=1/res_factor))
     col_res = np.zeros([2, Nx, Ny, Nz])
     col_res[0] = copy.deepcopy(A) #init
 
-    # Simulation code
-    D_domain = get_D(sWM_low_res, sGM_low_res, 0.1, Dw, RatioDw_Dg)
+    
 
-    result = {}
+
+    
     print(A.shape)
+    
+    #cropping
+    cropped_GM, cropped_WM, A, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.1)
+    
+    # Simulation code
+    D_domain = get_D(cropped_WM, cropped_GM, 0.1, Dw, RatioDw_Dg)
+    result = {}
     try:
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
+        print(A.shape)
+        #revert cropping
+        A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
         col_res[1] = copy.deepcopy(A)  # final
 
         # Save results in the result dictionary
