@@ -198,12 +198,16 @@ def solver(params):
     # Initialize time series list if needed
     time_series_data = [] if time_series_solution_Nt is not None else None
 
+    # Calculate the interval for recording data points
+    if time_series_data is not None:
+        interval = max(1, N_simulation_steps // (time_series_solution_Nt - 1))
+
     try:
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
             # Record intermediate values at specified intervals
-            if time_series_data is not None and t % time_series_solution_Nt == 0:
+            if time_series_data is not None and (t % interval == 0 or t == N_simulation_steps - 1):
                 time_series_data.append(copy.deepcopy(A))
 
         # Process final state
