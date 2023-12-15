@@ -194,36 +194,49 @@ def solver(params):
     result = {}
     
     time_series_solution_Nt = params.get('time_series_solution_Nt', None)
-
     # Initialize time series list if needed
     time_series_data = [] if time_series_solution_Nt is not None else None
 
     # Calculate the interval for recording data points
     if time_series_data is not None:
-        interval = max(1, N_simulation_steps // (time_series_solution_Nt - 1))
+        # Using float for interval calculation
+        interval = (N_simulation_steps - 1) / (time_series_solution_Nt - 1)
 
     try:
+        counter = 0  # Initialize a counter to track when to record data
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
-            # Record intermediate values at specified intervals
-            if time_series_data is not None and (t % interval == 0 or t == N_simulation_steps - 1):
+            # Record the first time step
+            if t == 0:
                 time_series_data.append(copy.deepcopy(A))
 
-        # Process final state
-        A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
-        col_res[1] = copy.deepcopy(A)  # final
+            # Increment counter and check if it's time to record data
+            if t > 0:  # Skip the first step since it's already recorded
+                counter += 1
+                if counter >= interval:
+                    time_series_data.append(copy.deepcopy(A))
+                    counter = 0  # Reset the counter after recording
 
-        # Save results in the result dictionary
-        result['initial_state'] = zoom(col_res[0], extrapolate_factor, order=1)
-        result['final_state'] = zoom(col_res[1], extrapolate_factor, order=1)
-        result['time_series'] = [zoom(state, extrapolate_factor, order=1) for state in time_series_data] if time_series_data is not None else None
-        result['Dw'] = Dw
-        result['rho'] = f
-        result['success'] = True
-        result['NxT1_pct'] = NxT1_pct
-        result['NyT1_pct'] = NyT1_pct
-        result['NzT1_pct'] = NzT1_pct
+        # Ensure the last time step is recorded
+        if N_simulation_steps > 1 and time_series_data[-1] is not A:
+            time_series_data.append(copy.deepcopy(A))
+
+            # Process final state
+            A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
+            col_res[1] = copy.deepcopy(A)  # final
+
+            # Save results in the result dictionary
+            result['initial_state'] = zoom(col_res[0], extrapolate_factor, order=1)
+            result['final_state'] = zoom(col_res[1], extrapolate_factor, order=1)
+            result['time_series'] = [zoom(state, extrapolate_factor, order=1) for state in time_series_data] if time_series_data is not None else None
+            result['Dw'] = Dw
+            result['rho'] = f
+            result['success'] = True
+            result['NxT1_pct'] = NxT1_pct
+            result['NyT1_pct'] = NyT1_pct
+            result['NzT1_pct'] = NzT1_pct
+            
     except Exception as e:
         result['error'] = str(e)
         result['success'] = False
