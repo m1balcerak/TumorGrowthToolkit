@@ -105,15 +105,15 @@ def restore_tumor(original_shape, tumor, crop_coords):
     return restored_tumor
 
 
-def gauss_sol3d(x, y, z, scale=1.0):
+def gauss_sol3d(x, y, z, dx,dy,dz):
     # Experimentally chosen
     Dt = 5.0
     M = 250
     
     # Apply scaling to the coordinates
-    x_scaled = x * scale
-    y_scaled = y * scale
-    z_scaled = z * scale
+    x_scaled = x * dx
+    y_scaled = y * dy
+    z_scaled = z * dz
 
     gauss = M / np.power(4 * np.pi * Dt, 3/2) * np.exp(- (np.power(x_scaled, 2) + np.power(y_scaled, 2) + np.power(z_scaled, 2)) / (4 * Dt))
     gauss = np.where(gauss > 0.1, gauss, 0)
@@ -190,7 +190,7 @@ def solver(params):
     N_simulation_steps = int(np.ceil(Nt))
 
     yv, xv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz))
-    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,scale=1/res_factor))
+    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz))
     col_res = np.zeros([2, Nx, Ny, Nz])
     col_res[0] = copy.deepcopy(A) #init
     
