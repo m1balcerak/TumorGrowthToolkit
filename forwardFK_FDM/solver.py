@@ -167,7 +167,15 @@ def solver(params):
 
     # Update grid size and steps for low resolution
     Nx, Ny, Nz = sGM_low_res.shape
-    dx = dy = dz = 1 / res_factor  # Adjust grid steps based on zoom factor
+    # Assuming params is your dictionary
+    dx_mm = params.get('dx_mm', 1)  # Get 'dx_mm' from params, default to 1 if not found
+    dy_mm = params.get('dy_mm', 1)  # Get 'dx_mm' from params, default to 1 if not found
+    dz_mm = params.get('dz_mm', 1)  # Get 'dx_mm' from params, default to 1 if not found
+
+    # Adjust grid steps based on zoom factor
+    dx = dx_mm / res_factor
+    dy = dy_mm / res_factor
+    dz = dz_mm / res_factor
 
 
     # Calculate the absolute positions based on percentages
