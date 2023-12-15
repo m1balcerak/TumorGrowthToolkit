@@ -185,10 +185,6 @@ def solver(params):
     A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,scale=1/res_factor))
     col_res = np.zeros([2, Nx, Ny, Nz])
     col_res[0] = copy.deepcopy(A) #init
-
-
-    
-    print(A.shape)
     
     #cropping
     cropped_GM, cropped_WM, A, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.1)
@@ -196,18 +192,28 @@ def solver(params):
     # Simulation code
     D_domain = get_D(cropped_WM, cropped_GM, 0.1, Dw, RatioDw_Dg)
     result = {}
+    
+    time_series_solution_Nt = params.get('time_series_solution_Nt', None)
+
+    # Initialize time series list if needed
+    time_series_data = [] if time_series_solution_Nt is not None else None
+
     try:
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
-        print(A.shape)
-        #revert cropping
+            # Record intermediate values at specified intervals
+            if time_series_data is not None and t % time_series_solution_Nt == 0:
+                time_series_data.append(copy.deepcopy(A))
+
+        # Process final state
         A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
         col_res[1] = copy.deepcopy(A)  # final
 
         # Save results in the result dictionary
         result['initial_state'] = zoom(col_res[0], extrapolate_factor, order=1)
         result['final_state'] = zoom(col_res[1], extrapolate_factor, order=1)
+        result['time_series'] = [zoom(state, extrapolate_factor, order=1) for state in time_series_data] if time_series_data is not None else None
         result['Dw'] = Dw
         result['rho'] = f
         result['success'] = True
