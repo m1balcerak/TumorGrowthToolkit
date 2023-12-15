@@ -203,20 +203,20 @@ def solver(params):
         interval = (N_simulation_steps - 1) / (time_series_solution_Nt - 1)
 
     try:
-        counter = 0  # Initialize a counter to track when to record data
+        cumulative_sum = 0.0  # Initialize cumulative sum for recording intervals
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
-            # Record the first time step
-            if t == 0:
+            # Always record the first and last timepoints
+            if t == 0 or t == N_simulation_steps - 1:
                 time_series_data.append(copy.deepcopy(A))
-
-            # Increment counter and check if it's time to record data
-            if t > 0:  # Skip the first step since it's already recorded
-                counter += 1
-                if counter >= interval:
+            else:
+                # Increment cumulative sum and check if it's time to record data
+                cumulative_sum += 1
+                if cumulative_sum >= interval:
                     time_series_data.append(copy.deepcopy(A))
-                    counter = 0  # Reset the counter after recording
+                    cumulative_sum -= interval  # Subtract interval from cumulative sum
+
 
         # Ensure the last time step is recorded
         if N_simulation_steps > 1 and time_series_data[-1] is not A:
