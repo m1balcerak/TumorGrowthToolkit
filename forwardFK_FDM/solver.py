@@ -105,15 +105,15 @@ def restore_tumor(original_shape, tumor, crop_coords):
     return restored_tumor
 
 
-def gauss_sol3d(x, y, z, dx,dy,dz):
+def gauss_sol3d(x, y, z, dx,dy,dz,init_scale):
     # Experimentally chosen
     Dt = 5.0
     M = 250
     
     # Apply scaling to the coordinates
-    x_scaled = x * dx
-    y_scaled = y * dy
-    z_scaled = z * dz
+    x_scaled = x * dx/init_scale
+    y_scaled = y * dy/init_scale
+    z_scaled = z * dz/init_scale
 
     gauss = M / np.power(4 * np.pi * Dt, 3/2) * np.exp(- (np.power(x_scaled, 2) + np.power(y_scaled, 2) + np.power(z_scaled, 2)) / (4 * Dt))
     gauss = np.where(gauss > 0.1, gauss, 0)
@@ -182,23 +182,23 @@ def solver(params):
     NxT1 = int(NxT1_pct * Nx)
     NyT1 = int(NyT1_pct * Ny)
     NzT1 = int(NzT1_pct * Nz)
-
+    threshold = 0.1
     days = 100
     Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100 
     print(Nt)
     dt = days/Nt
     N_simulation_steps = int(np.ceil(Nt))
-
+    init_scale  = params.get('init_scale', 1)
     yv, xv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz))
-    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz))
+    A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz,init_scale))
     col_res = np.zeros([2, Nx, Ny, Nz])
     col_res[0] = copy.deepcopy(A) #init
     
     #cropping
-    cropped_GM, cropped_WM, A, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.1)
+    cropped_GM, cropped_WM, A, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.5)
     
     # Simulation code
-    D_domain = get_D(cropped_WM, cropped_GM, 0.1, Dw, RatioDw_Dg)
+    D_domain = get_D(cropped_WM, cropped_GM, threshold, Dw, RatioDw_Dg)
     result = {}
     
     time_series_solution_Nt = params.get('time_series_solution_Nt', None)
