@@ -197,30 +197,18 @@ def solver(params):
     # Initialize time series list if needed
     time_series_data = [] if time_series_solution_Nt is not None else None
 
-    # Calculate the interval for recording data points
+    # Determine the steps at which to record the data
     if time_series_data is not None:
-        # Using float for interval calculation
-        interval = (N_simulation_steps - 1) / (time_series_solution_Nt - 1)
+        # Using linspace to get exact steps to record, including first and last
+        record_steps = np.linspace(0, N_simulation_steps - 1, time_series_solution_Nt, dtype=int)
 
     try:
-        cumulative_sum = 0.0  # Initialize cumulative sum for recording intervals
         for t in range(N_simulation_steps):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
-            # Always record the first and last timepoints
-            if t == 0 or t == N_simulation_steps - 1:
+            # Record data at specified steps
+            if t in record_steps:
                 time_series_data.append(copy.deepcopy(A))
-            else:
-                # Increment cumulative sum and check if it's time to record data
-                cumulative_sum += 1
-                if cumulative_sum >= interval:
-                    time_series_data.append(copy.deepcopy(A))
-                    cumulative_sum -= interval  # Subtract interval from cumulative sum
-
-
-        # Ensure the last time step is recorded
-        if N_simulation_steps > 1 and time_series_data[-1] is not A:
-            time_series_data.append(copy.deepcopy(A))
 
             # Process final state
             A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
