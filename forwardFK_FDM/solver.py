@@ -136,13 +136,21 @@ def solver(params):
     # Unpack parameters
     Dw = params['Dw']
     f = params['rho']
-    RatioDw_Dg = params['RatioDw_Dg']
+    
     sGM = params['gm']
     sWM = params['wm']
     NxT1_pct = params['NxT1_pct']
     NyT1_pct = params['NyT1_pct']
     NzT1_pct = params['NzT1_pct']
-    res_factor = params['resolution_factor']  # New parameter for resolution
+    res_factor = params['resolution_factor']  #Res scaling
+    RatioDw_Dg = params.get('RatioDw_Dg', 10.)
+    th_matter = params.get('th_matter', 0.1)
+    dx_mm = params.get('dx_mm', 1.)  #default 1mm
+    dy_mm = params.get('dy_mm', 1.)  
+    dz_mm = params.get('dz_mm', 1.)
+    init_scale  = params.get('init_scale', 1.)
+    time_series_solution_Nt = params.get('time_series_solution_Nt', None) #record timeseries, number of steps
+    verbose = params.get('verbose', False)  
 
     # Validate input
     assert isinstance(sGM, np.ndarray), "sGM must be a numpy array"
@@ -167,10 +175,7 @@ def solver(params):
 
     # Update grid size and steps for low resolution
     Nx, Ny, Nz = sGM_low_res.shape
-    # Assuming params is your dictionary
-    dx_mm = params.get('dx_mm', 1)  # Get 'dx_mm' from params, default to 1 if not found
-    dy_mm = params.get('dy_mm', 1)  # Get 'dx_mm' from params, default to 1 if not found
-    dz_mm = params.get('dz_mm', 1)  # Get 'dx_mm' from params, default to 1 if not found
+
 
     # Adjust grid steps based on zoom factor
     dx = dx_mm / res_factor
@@ -182,13 +187,13 @@ def solver(params):
     NxT1 = int(NxT1_pct * Nx)
     NyT1 = int(NyT1_pct * Ny)
     NzT1 = int(NzT1_pct * Nz)
-    threshold = 0.1
     days = 100
-    Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100 
-    print(Nt)
+    Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
     dt = days/Nt
     N_simulation_steps = int(np.ceil(Nt))
-    init_scale  = params.get('init_scale', 1)
+    if verbose: 
+        print(f'Number of simulation timesteps: {N_simulation_steps}')
+
     yv, xv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz))
     A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz,init_scale))
     col_res = np.zeros([2, Nx, Ny, Nz])
@@ -198,10 +203,9 @@ def solver(params):
     cropped_GM, cropped_WM, A, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.5)
     
     # Simulation code
-    D_domain = get_D(cropped_WM, cropped_GM, threshold, Dw, RatioDw_Dg)
+    D_domain = get_D(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg)
     result = {}
     
-    time_series_solution_Nt = params.get('time_series_solution_Nt', None)
     # Initialize time series list if needed
     time_series_data = [] if time_series_solution_Nt is not None else None
 
@@ -215,23 +219,24 @@ def solver(params):
             A = FK_update(A, D_domain, f, dt, dx, dy, dz)
 
             # Record data at specified steps
-            if t in record_steps:
-                time_series_data.append(copy.deepcopy(A))
+            if time_series_data is not None:
+                if t in record_steps:
+                    time_series_data.append(copy.deepcopy(A))
 
-            # Process final state
-            A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
-            col_res[1] = copy.deepcopy(A)  # final
+        # Process final state
+        A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
+        col_res[1] = copy.deepcopy(A)  # final
 
-            # Save results in the result dictionary
-            result['initial_state'] = zoom(col_res[0], extrapolate_factor, order=1)
-            result['final_state'] = zoom(col_res[1], extrapolate_factor, order=1)
-            result['time_series'] = [zoom(state, extrapolate_factor, order=1) for state in time_series_data] if time_series_data is not None else None
-            result['Dw'] = Dw
-            result['rho'] = f
-            result['success'] = True
-            result['NxT1_pct'] = NxT1_pct
-            result['NyT1_pct'] = NyT1_pct
-            result['NzT1_pct'] = NzT1_pct
+        # Save results in the result dictionary
+        result['initial_state'] = np.array(zoom(col_res[0], extrapolate_factor, order=1))
+        result['final_state'] = np.array(zoom(col_res[1], extrapolate_factor, order=1))
+        result['time_series'] = np.array([zoom(state, extrapolate_factor, order=1) for state in time_series_data]) if time_series_data is not None else None
+        result['Dw'] = Dw
+        result['rho'] = f
+        result['success'] = True
+        result['NxT1_pct'] = NxT1_pct
+        result['NyT1_pct'] = NyT1_pct
+        result['NzT1_pct'] = NzT1_pct
             
     except Exception as e:
         result['error'] = str(e)
