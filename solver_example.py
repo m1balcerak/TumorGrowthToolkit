@@ -58,7 +58,9 @@ def plot_tumor_states(wm_data, initial_state, final_state, slice_index):
     plt.imshow(final_state[:, :, slice_index], cmap=cmap2, vmin=0, vmax=1, alpha=0.65)
     plt.title("Final Tumor State")
 
+    plt.savefig('plot1')
     plt.show()
+    
 
 def plot_time_series(wm_data, time_series_data, slice_index):
     plt.figure(figsize=(24, 12))
@@ -73,7 +75,9 @@ def plot_time_series(wm_data, time_series_data, slice_index):
         plt.title(f"Time Slice {t + 1}")
 
     plt.tight_layout()
+    plt.savefig('plot2')
     plt.show()
+    
 
 # Run the solver and plot the results
 start_time = time.time()
