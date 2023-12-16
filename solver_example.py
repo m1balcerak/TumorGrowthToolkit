@@ -28,6 +28,7 @@ parameters = {
     'NxT1_pct': 0.5,    # tumor position [%]
     'NyT1_pct': 0.6,
     'NzT1_pct': 0.5,
+    'init_scale': 1., #scale of the initial gaussian
     'resolution_factor': 0.6, #resultion scaling for calculations
     'th_matter': 0.1, #when to stop diffusing: at th_matter > gm+wm
     'verbose': True, #printing timesteps 
