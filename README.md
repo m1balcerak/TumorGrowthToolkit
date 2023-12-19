@@ -1,8 +1,12 @@
 
-# Tumor Growth Solver
+# TumorGrowthToolkit
 
-This repository contains the `forwardFK_FDM` package, which includes a solver for simulating tumor growth using the Fisher-Kolmogorov model.
+Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and analysis of tumor growth using numerical solvers for Partial Differential Equations (PDEs). 
 
+## Models
+- Fisher-Kolmogorov FDM Solver (FisherKolmogorow)
+- ...
+  
 ## Installation
 
 To use the solver, first install the package by cloning this repository, going to the setup.py directory and using:
@@ -12,16 +16,15 @@ pip install .
 
 use without clone installation:
 ```
-pip install git+https://github.com/m1balcerak/forwardFK_FDM.git
+pip install git+https://github.com/m1balcerak/TumorGrowthToolkit.git
 ```
 
 ## Usage
 
 Example usage:
 ```
-python solver_example.py
+python FK_example.py
 ```
-Creates plot1.png, plot2.png
 
 ## License
 
