@@ -1,7 +1,7 @@
 
 # TumorGrowthToolkit
 
-Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and analysis of tumor growth using numerical solvers for Partial Differential Equations (PDEs). 
+Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and analysis of tumor growth using numerical solvers for Partial Differential Equations. 
 
 ## Models
 - Fisher-Kolmogorov FDM Solver (FisherKolmogorow)
@@ -25,6 +25,8 @@ Example usage:
 ```
 python FK_example.py
 ```
+Outputs a dictonary with results. Produces plots of the tumor progression in a random anathomy:
+![Example Image](figures/plot2.png)
 
 ## License
 
