@@ -1,8 +1,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='forwardFK_FDM',
-    version='0.1',
+    name='TumorGrowthToolkit',
+    version='0.2',
     packages=find_packages(),
     install_requires=[
         'numpy',
@@ -10,5 +10,5 @@ setup(
     ],
     author='Michal Balcerak',
     author_email='m1balcerak@gmail.com',
-    description='FK FDM solver - simulating tumor growth in the brain.'
+    description=''
 )
