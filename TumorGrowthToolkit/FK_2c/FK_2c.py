@@ -228,7 +228,7 @@ class Solver(BaseSolver):
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
         days = 100
-        Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*Nt_multiplier + 100
+        Nt = days * np.max([Dw,D_s])/np.power((np.min([dx,dy,dz])),2)*Nt_multiplier + 100
         dt = days/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
@@ -279,7 +279,7 @@ class Solver(BaseSolver):
             for field in ['P', 'N', 'S']:
                 time_series_data[field] = np.array(time_series_data[field])
 
-            result['time_series'] = {field: [zoom(state, extrapolate_factor, order=1) for state in time_series_data[field]] for field in ['P', 'N', 'S']}
+            result['time_series'] = {field: [zoom(restore_tumor(sGM_low_res.shape, state, (min_coords, max_coords)), extrapolate_factor, order=1) for state in time_series_data[field]] for field in ['P', 'N', 'S']}
 
         else:
             result['time_series'] = None
