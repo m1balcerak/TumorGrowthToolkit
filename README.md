@@ -24,6 +24,6 @@ pip install git+https://github.com/m1balcerak/TumorGrowthToolkit.git
 
 Example usage in ```FK_2c_example.ipynb.```
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+## References
+In publications using TumorGrowthToolkit pleace cite:
+1. Balcerak, M., Ezhov, I., Karnakov, P., Litvinov, S., Koumoutsakos, P., Weidner, J., Zhang, R. Z., Lowengrub, J. S., Wiestler, B., & Menze, B. (2023). Individualizing Glioma Radiotherapy Planning by Optimization of a Data and Physics Informed Discrete Loss. arXiv preprint arXiv:2312.05063.
