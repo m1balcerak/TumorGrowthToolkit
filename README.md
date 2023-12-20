@@ -10,14 +10,9 @@ Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and 
   
 ## Installation
 
-To use the solver, first install the package by cloning this repository, going to the setup.py directory and using:
+To use the solver, first install the package by cloning this repository and using:
 ```
 pip install .
-```
-
-use without clone installation:
-```
-pip install git+https://github.com/m1balcerak/TumorGrowthToolkit.git
 ```
 
 ## Usage
