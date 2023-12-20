@@ -15,11 +15,45 @@ def m_Tildas(WM,GM,th):
     
     return {"WM_t_x": WM_tilda_x,"WM_t_y": WM_tilda_y,"WM_t_z": WM_tilda_z,"GM_t_x": GM_tilda_x,"GM_t_y": GM_tilda_y,"GM_t_z": GM_tilda_z}
 
+
+def m_Tildas_with_necro(WM, GM, NC, th, th_necro):
+    # Helper function to create combined conditions for each axis
+    def combined_condition(axis):
+        matter_cond = np.logical_and(np.roll(WM + GM, -1, axis=axis) >= th, WM + GM >= th)
+        necro_cond = np.logical_and(np.roll(NC, -1, axis=axis) <= (1 - th_necro), NC <= (1 - th_necro))
+        return np.logical_and(matter_cond, necro_cond)
+
+    # Combined conditions for x, y, z axes
+    combined_cond_x = combined_condition(0)
+    combined_cond_y = combined_condition(1)
+    combined_cond_z = combined_condition(2)
+
+    # Calculate tildas using combined conditions
+    WM_tilda_x = np.where(combined_cond_x, (np.roll(WM, -1, axis=0) + WM) / 2, 0)
+    WM_tilda_y = np.where(combined_cond_y, (np.roll(WM, -1, axis=1) + WM) / 2, 0)
+    WM_tilda_z = np.where(combined_cond_z, (np.roll(WM, -1, axis=2) + WM) / 2, 0)
+
+    GM_tilda_x = np.where(combined_cond_x, (np.roll(GM, -1, axis=0) + GM) / 2, 0)
+    GM_tilda_y = np.where(combined_cond_y, (np.roll(GM, -1, axis=1) + GM) / 2, 0)
+    GM_tilda_z = np.where(combined_cond_z, (np.roll(GM, -1, axis=2) + GM) / 2, 0)
+
+    return {
+        "WM_t_x": WM_tilda_x, "WM_t_y": WM_tilda_y, "WM_t_z": WM_tilda_z,
+        "GM_t_x": GM_tilda_x, "GM_t_y": GM_tilda_y, "GM_t_z": GM_tilda_z
+    }
+
+# Example usage:
+# WM, GM, NC are your input arrays for white matter, grey matter, and necrotic core respectively.
+# th is the threshold for matter presence, and th_necro is the threshold for necrotic core.
+# result = m_Tildas(WM, GM, NC, th, th_necro)
+
+
+
 def get_D(WM,GM,th,Dw,Dw_ratio):
     M = m_Tildas(WM,GM,th)
     D_minus_x = Dw*(M["WM_t_x"] + M["GM_t_x"]/Dw_ratio)
     D_minus_y = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
-    D_minus_z = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
+    D_minus_z = Dw*(M["WM_t_z"] + M["GM_t_z"]/Dw_ratio)
     
     D_plus_x = Dw*(np.roll(M["WM_t_x"],1,axis=0) + np.roll(M["GM_t_x"],1,axis=0)/Dw_ratio)
     D_plus_y = Dw*(np.roll(M["WM_t_y"],1,axis=1) + np.roll(M["GM_t_y"],1,axis=1)/Dw_ratio)
@@ -27,8 +61,21 @@ def get_D(WM,GM,th,Dw,Dw_ratio):
     
     return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
 
-def FK_2c_update(P, N, S, D_domain, f, lambda_np, sigma_np, D_s, lambda_s, dt, dx, dy, dz):
+def get_D_with_necro(WM,GM,th,Dw,Dw_ratio, NC, th_necro):
+    M = m_Tildas_with_necro(WM,GM,NC,th, th_necro)
+    D_minus_x = Dw*(M["WM_t_x"] + M["GM_t_x"]/Dw_ratio)
+    D_minus_y = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
+    D_minus_z = Dw*(M["WM_t_z"] + M["GM_t_z"]/Dw_ratio)
+    
+    D_plus_x = Dw*(np.roll(M["WM_t_x"],1,axis=0) + np.roll(M["GM_t_x"],1,axis=0)/Dw_ratio)
+    D_plus_y = Dw*(np.roll(M["WM_t_y"],1,axis=1) + np.roll(M["GM_t_y"],1,axis=1)/Dw_ratio)
+    D_plus_z = Dw*(np.roll(M["WM_t_z"],1,axis=2) + np.roll(M["GM_t_z"],1,axis=2)/Dw_ratio)
+    
+    return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
+
+def FK_2c_update(P, N, S, D_domain, f, lambda_np, sigma_np, D_s_domain, lambda_s, dt, dx, dy, dz):
     D = D_domain
+    D_s = D_s_domain
     H = smooth_heaviside(S, sigma_np)
 
     # Update for P (proliferative cells)
@@ -44,9 +91,9 @@ def FK_2c_update(P, N, S, D_domain, f, lambda_np, sigma_np, D_s, lambda_s, dt, d
     N += diff_N
 
     # Update for S (nutrient field)
-    SS_x = 1/(dx*dx) * (D_s * (np.roll(S, 1, axis=0) - 2 * S + np.roll(S, -1, axis=0)))
-    SS_y = 1/(dy*dy) * (D_s * (np.roll(S, 1, axis=1) - 2 * S + np.roll(S, -1, axis=1)))
-    SS_z = 1/(dz*dz) * (D_s * (np.roll(S, 1, axis=2) - 2 * S + np.roll(S, -1, axis=2)))
+    SS_x = 1/(dx*dx) * (D_s["D_plus_x"] * (np.roll(S, 1, axis=0) - S) - D_s["D_minus_x"] * (S - np.roll(S, -1, axis=0)))
+    SS_y = 1/(dy*dy) * (D_s["D_plus_y"] * (np.roll(S, 1, axis=1) - S) - D_s["D_minus_y"] * (S - np.roll(S, -1, axis=1)))
+    SS_z = 1/(dz*dz) * (D_s["D_plus_z"] * (np.roll(S, 1, axis=2) - S) - D_s["D_minus_z"] * (S - np.roll(S, -1, axis=2)))
     SS = SS_x + SS_y + SS_z
     diff_S = (SS - lambda_s * S * P) * dt
     S += diff_S
@@ -154,11 +201,13 @@ def gauss_sol3d(x, y, z, dx,dy,dz,init_scale):
 
 
 
-def get_initial_configuration(NxT,NyT,NzT,Nx,Ny,Nz,dx,dy,dz,init_scale):
+def get_initial_configuration(NxT,NyT,NzT,Nx,Ny,Nz,dx,dy,dz,init_scale,GM,WM,th_matter):
     xv, yv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz), indexing='ij')
     P = np.array(gauss_sol3d(xv - NxT, yv - NyT, zv - NzT,dx,dy,dz,init_scale))
     N = np.zeros(P.shape)
     S = np.ones(P.shape)
+    #remove csf from S
+    S = np.where(WM + GM >= th_matter, S, 0)
     
     initial_states = {'P': P, 'N': N, 'S': S}
     
@@ -184,6 +233,7 @@ class Solver(BaseSolver):
         res_factor = self.params['resolution_factor']  #Res scaling
         RatioDw_Dg = self.params.get('RatioDw_Dg', 10.)
         th_matter = self.params.get('th_matter', 0.1)
+        th_necro = self.params.get('th_necro', 0.1)
         dx_mm = self.params.get('dx_mm', 1.)  #default 1mm
         dy_mm = self.params.get('dy_mm', 1.)  
         dz_mm = self.params.get('dz_mm', 1.)
@@ -235,7 +285,7 @@ class Solver(BaseSolver):
             print(f'Number of simulation timesteps: {N_simulation_steps}')
 
         # Assuming get_initial_configuration now returns a dictionary
-        initial_states = get_initial_configuration(NxT1, NyT1, NzT1, Nx, Ny, Nz, dx, dy, dz, init_scale)
+        initial_states = get_initial_configuration(NxT1, NyT1, NzT1, Nx, Ny, Nz, dx, dy, dz, init_scale, sGM_low_res, sWM_low_res, th_matter)
 
         col_res = {'initial_state': {}, 'final_state': {}}
         col_res['initial_state'] = copy.deepcopy(initial_states)  # Store initial states
@@ -243,7 +293,8 @@ class Solver(BaseSolver):
         # Cropping
         cropped_GM, cropped_WM, cropped_states, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, initial_states['P'], initial_states['N'], initial_states['S'], margin=2, threshold=0.5)
         # Simulation code
-        D_domain = get_D(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg)
+        D_domain = get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg,cropped_states['N'],th_necro)
+        D_s_domain = get_D(cropped_WM, cropped_GM, th_matter, D_s, 1)
         result = {}
 
         if time_series_solution_Nt is not None:
@@ -255,8 +306,8 @@ class Solver(BaseSolver):
 
         #try:
         for t in range(N_simulation_steps):
-            updated_states = FK_2c_update(cropped_states['P'], cropped_states['N'], cropped_states['S'], D_domain, f,lambda_np, sigma_np, D_s, lambda_s,  dt, dx, dy, dz)
-
+            updated_states = FK_2c_update(cropped_states['P'], cropped_states['N'], cropped_states['S'], D_domain, f,lambda_np, sigma_np, D_s_domain, lambda_s,  dt, dx, dy, dz)
+            D_domain = get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg,updated_states['N'],th_necro)
             # Update states
             cropped_states.update(updated_states)
 
