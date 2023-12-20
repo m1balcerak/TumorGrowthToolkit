@@ -1,11 +1,12 @@
 
 # TumorGrowthToolkit
 
-Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and analysis of tumor growth using numerical solvers for Partial Differential Equations. 
+Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and analysis of tumor growth using numerical solvers for Partial Differential Equations.
+![Example Image](figures/FK_2c.png)
 
 ## Models
-- Fisher-Kolmogorov FDM Solver
-- ...
+- Reaction-diffusion multi-cell with a nutrient field (1: proliferative/diffusive, 2: necrotic)  (FK_2c)
+- Reaction-diffusion single cell (FK)
   
 ## Installation
 
@@ -21,7 +22,7 @@ pip install git+https://github.com/m1balcerak/TumorGrowthToolkit.git
 
 ## Usage
 
-Example usage in ```FK_example.ipynb.```
+Example usage in ```FK_2c_example.ipynb.```
 
 ## License
 
