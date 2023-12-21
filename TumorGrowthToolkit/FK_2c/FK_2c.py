@@ -16,12 +16,12 @@ def m_Tildas(WM,GM,th):
     return {"WM_t_x": WM_tilda_x,"WM_t_y": WM_tilda_y,"WM_t_z": WM_tilda_z,"GM_t_x": GM_tilda_x,"GM_t_y": GM_tilda_y,"GM_t_z": GM_tilda_z}
 
 
-def m_Tildas_with_necro(WM, GM, NC, th, th_necro):
+def m_Tildas_with_necro(WM, GM, PC, PN, th, th_necro):
     # Helper function to create combined conditions for each axis
     def combined_condition(axis):
         matter_cond = np.logical_and(np.roll(WM + GM, -1, axis=axis) >= th, WM + GM >= th)
-        necro_cond = np.logical_and(np.roll(NC, -1, axis=axis) <= (1 - th_necro), NC <= (1 - th_necro))
-        return np.logical_and(matter_cond, necro_cond)
+        full_region_cond = np.logical_and(np.roll(PC + PN, -1, axis=axis) <= th_necro, PC + PN <= th_necro)
+        return np.logical_and(matter_cond, full_region_cond)
 
     # Combined conditions for x, y, z axes
     combined_cond_x = combined_condition(0)
@@ -42,10 +42,7 @@ def m_Tildas_with_necro(WM, GM, NC, th, th_necro):
         "GM_t_x": GM_tilda_x, "GM_t_y": GM_tilda_y, "GM_t_z": GM_tilda_z
     }
 
-# Example usage:
-# WM, GM, NC are your input arrays for white matter, grey matter, and necrotic core respectively.
-# th is the threshold for matter presence, and th_necro is the threshold for necrotic core.
-# result = m_Tildas(WM, GM, NC, th, th_necro)
+
 
 
 
@@ -61,8 +58,8 @@ def get_D(WM,GM,th,Dw,Dw_ratio):
     
     return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
 
-def get_D_with_necro(WM,GM,th,Dw,Dw_ratio, NC, th_necro):
-    M = m_Tildas_with_necro(WM,GM,NC,th, th_necro)
+def get_D_with_necro(WM,GM,th,Dw,Dw_ratio, PC, NC, th_necro):
+    M = m_Tildas_with_necro(WM,GM,PC,NC,th, th_necro)
     D_minus_x = Dw*(M["WM_t_x"] + M["GM_t_x"]/Dw_ratio)
     D_minus_y = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
     D_minus_z = Dw*(M["WM_t_z"] + M["GM_t_z"]/Dw_ratio)
@@ -232,14 +229,14 @@ class Solver(BaseSolver):
         NzT1_pct = self.params['NzT1_pct']
         res_factor = self.params['resolution_factor']  #Res scaling
         RatioDw_Dg = self.params.get('RatioDw_Dg', 10.)
-        th_matter = self.params.get('th_matter', 0.1)
-        th_necro = self.params.get('th_necro', 0.1)
+        th_matter = self.params.get('th_matter', 0.1)  #when to stop diffusing to a region: when matter <= 0.1
+        th_necro = self.params.get('th_necro', 0.9) #when to stop diffusing to a region: when cells >= 0.9
         dx_mm = self.params.get('dx_mm', 1.)  #default 1mm
         dy_mm = self.params.get('dy_mm', 1.)  
         dz_mm = self.params.get('dz_mm', 1.)
         init_scale  = self.params.get('init_scale', 1.)
         time_series_solution_Nt = self.params.get('time_series_solution_Nt', None) #record timeseries, number of steps
-        Nt_multiplier = self.params.get('Nt_multiplier',8)
+        Nt_multiplier = self.params.get('Nt_multiplier',9)
         verbose = self.params.get('verbose', False)  
 
         # Validate input
@@ -293,7 +290,7 @@ class Solver(BaseSolver):
         # Cropping
         cropped_GM, cropped_WM, cropped_states, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, initial_states['P'], initial_states['N'], initial_states['S'], margin=2, threshold=0.5)
         # Simulation code
-        D_domain = get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg,cropped_states['N'],th_necro)
+        D_domain = get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg, cropped_states['P'],cropped_states['N'],th_necro)
         D_s_domain = get_D(cropped_WM, cropped_GM, th_matter, D_s, 1)
         result = {}
 
@@ -307,7 +304,7 @@ class Solver(BaseSolver):
         #try:
         for t in range(N_simulation_steps):
             updated_states = FK_2c_update(cropped_states['P'], cropped_states['N'], cropped_states['S'], D_domain, f,lambda_np, sigma_np, D_s_domain, lambda_s,  dt, dx, dy, dz)
-            D_domain = get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg,updated_states['N'],th_necro)
+            D_domain = get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg, cropped_states['P'], updated_states['N'],th_necro)
             # Update states
             cropped_states.update(updated_states)
 
