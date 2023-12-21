@@ -15,9 +15,18 @@ To use the solver, first install the package by cloning this repository and usin
 pip install .
 ```
 
-## Usage
+## Running solvers/plotting
 
 Example usage in ```FK_2c_example.ipynb.```
+
+## Synthetic patients generator
+
+Example usage:
+```
+cd synthetic_gens
+run_gen_FK_2c.py
+```
+Creates synthetic patients with PET images and tumor segmentations (enhancing core, necrotic core, edema).
 
 ## References
 In publications using TumorGrowthToolkit pleace cite:
