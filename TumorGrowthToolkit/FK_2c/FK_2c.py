@@ -236,7 +236,7 @@ class Solver(BaseSolver):
         dz_mm = self.params.get('dz_mm', 1.)
         init_scale  = self.params.get('init_scale', 1.)
         time_series_solution_Nt = self.params.get('time_series_solution_Nt', None) #record timeseries, number of steps
-        Nt_multiplier = self.params.get('Nt_multiplier',9)
+        Nt_multiplier = self.params.get('Nt_multiplier',8)
         verbose = self.params.get('verbose', False)  
 
         # Validate input
