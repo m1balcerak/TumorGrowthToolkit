@@ -24,7 +24,7 @@ Example usage in ```FK_2c_example.ipynb.```
 Example usage:
 ```
 cd synthetic_gens
-run_gen_FK_2c.py
+python run_gen_FK_2c.py
 ```
 Creates synthetic patients with PET images and tumor segmentations (enhancing core, necrotic core, edema).
 
