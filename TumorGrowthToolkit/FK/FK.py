@@ -234,7 +234,7 @@ class Solver(BaseSolver):
             # Save results in the result dictionary
             result['initial_state'] = np.array(zoom(col_res[0], extrapolate_factor, order=1))
             result['final_state'] = np.array(zoom(col_res[1], extrapolate_factor, order=1))
-            result['time_series'] = np.array([zoom(state, extrapolate_factor, order=1) for state in time_series_data]) if time_series_data is not None else None
+            result['time_series'] = np.array([zoom(restore_tumor(sGM_low_res.shape, state, (min_coords, max_coords)), extrapolate_factor, order=1) for state in time_series_data]) if time_series_data is not None else None
             result['Dw'] = Dw
             result['rho'] = f
             result['success'] = True
