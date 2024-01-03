@@ -12,7 +12,7 @@ Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and 
 
 To use the solver, first install the package by cloning this repository and using:
 ```
-pip install .
+pip install -e .
 ```
 
 ## Running solvers/plotting
