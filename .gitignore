@@ -2,5 +2,4 @@ dist/*
 synthetic_gens/*
 *.pyc
 *.egg-info
-```
-TumorGrowthToolkit/FK_DTI/RGBExample.nii.gz
+dataset/RGBExample.nii.gz 
