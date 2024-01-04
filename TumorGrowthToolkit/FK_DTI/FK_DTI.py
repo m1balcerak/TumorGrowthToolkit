@@ -5,13 +5,48 @@ from ..base_solver import BaseSolver
 
 from ..FK.FK import Solver as FK_Solver
 
+'''
+Forward solver DTI 
+
+1.	It was unnecessary to use the full DTI tensors, as we are simulating on a grid. So, I used the diffusion in each direction (x,y,z) within each voxel. This is equivalent to the colored DTI images.
+ 
+This is how you can generate such an RGB image from DTI:  https://dipy.org/documentation/1.0.0./examples_built/reconst_dti/, but I also included one.
+
+2.	Based on those diffusion values in each direction, I changed the Fisher-Kolmogorov diffusion value along this direction ( ‘get_D_from_DTI()’ ). You can think of many ways to do this. The easiest way would be a proportional mapping, but to suppress low DTI values, I used a polynomial mapping.
+
+By Jonas Weidner - 2023
+'''
+
 class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
-    
-    def solve(self):
-        return super().solve()
+
+    def get_D_from_DTI(self, dtiRGB, DwMax, exponent = 1 , maskOut=None, linear = 0):
         '''
+        dtiRGB: 4D array of shape (Nx,Ny,Nz,3) containing the RGB values of the DTI image
+        DwMax: maximum diffusion coefficient
+        
+        # monotonic function to map RGB to diffusion coefficient
+        exponent: an exponent to increase/decrease the impact of large/small RGB values
+        linear: a linear factor to make the function more or less steep
+
+        maskOut: a mask to mask out certain regions of the brain. If None, no mask is applied
+        '''
+        if maskOut is not None:
+            dtiRGB[maskOut] = 0
+        
+        D_minus_x = (dtiRGB[:,:,:,0]**exponent + dtiRGB[:,:,:,0] * linear) *DwMax
+        D_minus_y = (dtiRGB[:,:,:,1]**exponent+ dtiRGB[:,:,:,1] * linear) *DwMax
+        D_minus_z = (dtiRGB[:,:,:,2]**exponent+ dtiRGB[:,:,:,2] * linear) *DwMax
+
+        D_plus_x = D_minus_x
+        D_plus_y = D_minus_y
+        D_plus_z = D_minus_z
+
+        return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
+        
+    def solve(self):
+
         # Unpack parameters
         Dw = self.params['Dw']
         f = self.params['rho']
