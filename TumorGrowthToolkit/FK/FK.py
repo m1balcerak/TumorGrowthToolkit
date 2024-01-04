@@ -3,139 +3,116 @@ import copy
 from scipy.ndimage import zoom
 from ..base_solver import BaseSolver
 
-def m_Tildas(WM,GM,th):
-        
-    WM_tilda_x = np.where(np.logical_and(np.roll(WM,-1,axis=0) + np.roll(GM,-1,axis=0) >= th,WM + GM >= th),(np.roll(WM,-1,axis=0) + WM)/2,0)
-    WM_tilda_y = np.where(np.logical_and(np.roll(WM,-1,axis=1) + np.roll(GM,-1,axis=1) >= th,WM + GM >= th),(np.roll(WM,-1,axis=1) + WM)/2,0)
-    WM_tilda_z = np.where(np.logical_and(np.roll(WM,-1,axis=2) + np.roll(GM,-1,axis=2) >= th,WM + GM >= th),(np.roll(WM,-1,axis=2) + WM)/2,0)
-
-    GM_tilda_x = np.where(np.logical_and(np.roll(WM,-1,axis=0) + np.roll(GM,-1,axis=0) >= th,WM + GM >= th),(np.roll(GM,-1,axis=0) + GM)/2,0)
-    GM_tilda_y = np.where(np.logical_and(np.roll(WM,-1,axis=1) + np.roll(GM,-1,axis=1) >= th,WM + GM >= th),(np.roll(GM,-1,axis=1) + GM)/2,0)
-    GM_tilda_z = np.where(np.logical_and(np.roll(WM,-1,axis=2) + np.roll(GM,-1,axis=2) >= th,WM + GM >= th),(np.roll(GM,-1,axis=2) + GM)/2,0)
-    
-    return {"WM_t_x": WM_tilda_x,"WM_t_y": WM_tilda_y,"WM_t_z": WM_tilda_z,"GM_t_x": GM_tilda_x,"GM_t_y": GM_tilda_y,"GM_t_z": GM_tilda_z}
-
-def get_D(WM,GM,th,Dw,Dw_ratio):
-    M = m_Tildas(WM,GM,th)
-    D_minus_x = Dw*(M["WM_t_x"] + M["GM_t_x"]/Dw_ratio)
-    D_minus_y = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
-    D_minus_z = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
-    
-    D_plus_x = Dw*(np.roll(M["WM_t_x"],1,axis=0) + np.roll(M["GM_t_x"],1,axis=0)/Dw_ratio)
-    D_plus_y = Dw*(np.roll(M["WM_t_y"],1,axis=1) + np.roll(M["GM_t_y"],1,axis=1)/Dw_ratio)
-    D_plus_z = Dw*(np.roll(M["WM_t_z"],1,axis=2) + np.roll(M["GM_t_z"],1,axis=2)/Dw_ratio)
-    
-    return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
-
-def FK_update(A,D_domain,f, dt,dx,dy,dz):
-    D = D_domain
-    SP_x = 1/(dx*dx) * (D["D_plus_x"]* (np.roll(A,1,axis=0) - A) - D["D_minus_x"]* (A - np.roll(A,-1,axis=0)) )
-    SP_y = 1/(dy*dy) * (D["D_plus_y"]* (np.roll(A,1,axis=1) - A) - D["D_minus_y"]* (A - np.roll(A,-1,axis=1)) )
-    SP_z = 1/(dz*dz) * (D["D_plus_z"]* (np.roll(A,1,axis=2) - A) - D["D_minus_z"]* (A - np.roll(A,-1,axis=2)) )
-    SP = SP_x + SP_y + SP_z
-    diff_A = (SP + f*np.multiply(A,1-A)) * dt
-    A += diff_A
-    return A
-
-import numpy as np
-
-def crop_tissues_and_tumor(GM, WM, tumor_initial, margin=2, threshold=0.05):
-    """
-    Crop GM, WM, and tumor_initial such that we remove the maximal amount of voxels
-    where the sum of GM and WM is lower than the threshold.
-    A margin is left around the tissues.
-
-    :param GM: 3D numpy array of gray matter
-    :param WM: 3D numpy array of white matter
-    :param tumor_initial: 3D numpy array of initial tumor
-    :param margin: Margin to leave around the tissues
-    :param threshold: Threshold to consider as no tissue
-    :return: Cropped GM, WM, tumor_initial, and the crop coordinates
-    """
-
-    # Combining GM and WM to find the region with tissue
-    tissue_sum = GM + WM
-
-    # Finding indices where the tissue sum is greater than or equal to the threshold
-    tissue_indices = np.argwhere(tissue_sum >= threshold)
-
-    # Finding the bounding box for cropping, considering the margin
-    min_coords = np.maximum(tissue_indices.min(axis=0) - margin, 0)
-    max_coords = np.minimum(tissue_indices.max(axis=0) + margin + 1, GM.shape)
-
-    # Cropping GM, WM, and tumor_initial
-    cropped_GM = GM[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
-    cropped_WM = WM[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
-    cropped_tumor_initial = tumor_initial[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
-
-    return cropped_GM, cropped_WM, cropped_tumor_initial, (min_coords, max_coords)
-
-def restore_tumor(original_shape, tumor, crop_coords):
-    """
-    Restore the cropped tumor data back to the original resolution by filling
-    the rest of the space with empty voxels.
-
-    :param original_shape: Shape of the original GM/WM arrays
-    :param tumor: Cropped tumor 3D numpy array
-    :param crop_coords: Coordinates used for cropping (min_coords, max_coords)
-    :return: Restored tumor array with original resolution
-    """
-    restored_tumor = np.zeros(original_shape)
-    min_coords, max_coords = crop_coords
-
-    restored_tumor[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]] = tumor
-
-    return restored_tumor
-
-
-def restore_tumor(original_shape, tumor, crop_coords):
-    """
-    Restore the cropped tumor data back to the original resolution by filling
-    the rest of the space with empty voxels.
-
-    :param original_shape: Shape of the original GM/WM arrays
-    :param tumor: Cropped tumor 3D numpy array
-    :param crop_coords: Coordinates used for cropping (min_coords, max_coords)
-    :return: Restored tumor array with original resolution
-    """
-    restored_tumor = np.zeros(original_shape)
-    min_coords, max_coords = crop_coords
-
-    restored_tumor[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]] = tumor
-
-    return restored_tumor
-
-
-def gauss_sol3d(x, y, z, dx,dy,dz,init_scale):
-    # Experimentally chosen
-    Dt = 5.0
-    M = 250
-    
-    # Apply scaling to the coordinates
-    x_scaled = x * dx/init_scale
-    y_scaled = y * dy/init_scale
-    z_scaled = z * dz/init_scale
-
-    gauss = M / np.power(4 * np.pi * Dt, 3/2) * np.exp(- (np.power(x_scaled, 2) + np.power(y_scaled, 2) + np.power(z_scaled, 2)) / (4 * Dt))
-    gauss = np.where(gauss > 0.1, gauss, 0)
-    gauss = np.where(gauss > 1, np.float64(1), gauss)
-    return gauss
-
-
-
-
-def get_initial_configuration(Nx,Ny,Nz,NxT,NyT,NzT,r):
-    A =  np.zeros([Nx,Ny,Nz])
-    if r == 0:
-        A[NxT, NyT,NzT] = 1
-    else:
-        A[NxT-r:NxT+r, NyT-r:NyT+r,NzT-r:NzT+r] = 1
-    
-    return A
-
 class Solver(BaseSolver):
     def __init__(self, params):
         super().__init__(params)
+    
+    def m_Tildas(self, WM,GM,th):
+            
+        WM_tilda_x = np.where(np.logical_and(np.roll(WM,-1,axis=0) + np.roll(GM,-1,axis=0) >= th,WM + GM >= th),(np.roll(WM,-1,axis=0) + WM)/2,0)
+        WM_tilda_y = np.where(np.logical_and(np.roll(WM,-1,axis=1) + np.roll(GM,-1,axis=1) >= th,WM + GM >= th),(np.roll(WM,-1,axis=1) + WM)/2,0)
+        WM_tilda_z = np.where(np.logical_and(np.roll(WM,-1,axis=2) + np.roll(GM,-1,axis=2) >= th,WM + GM >= th),(np.roll(WM,-1,axis=2) + WM)/2,0)
+
+        GM_tilda_x = np.where(np.logical_and(np.roll(WM,-1,axis=0) + np.roll(GM,-1,axis=0) >= th,WM + GM >= th),(np.roll(GM,-1,axis=0) + GM)/2,0)
+        GM_tilda_y = np.where(np.logical_and(np.roll(WM,-1,axis=1) + np.roll(GM,-1,axis=1) >= th,WM + GM >= th),(np.roll(GM,-1,axis=1) + GM)/2,0)
+        GM_tilda_z = np.where(np.logical_and(np.roll(WM,-1,axis=2) + np.roll(GM,-1,axis=2) >= th,WM + GM >= th),(np.roll(GM,-1,axis=2) + GM)/2,0)
+        
+        return {"WM_t_x": WM_tilda_x,"WM_t_y": WM_tilda_y,"WM_t_z": WM_tilda_z,"GM_t_x": GM_tilda_x,"GM_t_y": GM_tilda_y,"GM_t_z": GM_tilda_z}
+
+    def get_D(self, WM, GM, th, Dw, Dw_ratio):
+        M = self.m_Tildas(WM,GM,th)
+        D_minus_x = Dw*(M["WM_t_x"] + M["GM_t_x"]/Dw_ratio)
+        D_minus_y = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
+        D_minus_z = Dw*(M["WM_t_y"] + M["GM_t_y"]/Dw_ratio)
+        
+        D_plus_x = Dw*(np.roll(M["WM_t_x"],1,axis=0) + np.roll(M["GM_t_x"],1,axis=0)/Dw_ratio)
+        D_plus_y = Dw*(np.roll(M["WM_t_y"],1,axis=1) + np.roll(M["GM_t_y"],1,axis=1)/Dw_ratio)
+        D_plus_z = Dw*(np.roll(M["WM_t_z"],1,axis=2) + np.roll(M["GM_t_z"],1,axis=2)/Dw_ratio)
+        
+        return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
+
+    def FK_update(self, A, D_domain, f, dt, dx, dy, dz):
+        D = D_domain
+        SP_x = 1/(dx*dx) * (D["D_plus_x"]* (np.roll(A,1,axis=0) - A) - D["D_minus_x"]* (A - np.roll(A,-1,axis=0)) )
+        SP_y = 1/(dy*dy) * (D["D_plus_y"]* (np.roll(A,1,axis=1) - A) - D["D_minus_y"]* (A - np.roll(A,-1,axis=1)) )
+        SP_z = 1/(dz*dz) * (D["D_plus_z"]* (np.roll(A,1,axis=2) - A) - D["D_minus_z"]* (A - np.roll(A,-1,axis=2)) )
+        SP = SP_x + SP_y + SP_z
+        diff_A = (SP + f*np.multiply(A,1-A)) * dt
+        A += diff_A
+        return A
+
+    def crop_tissues_and_tumor(self, GM, WM, tumor_initial, margin=2, threshold=0.05):
+        """
+        Crop GM, WM, and tumor_initial such that we remove the maximal amount of voxels
+        where the sum of GM and WM is lower than the threshold.
+        A margin is left around the tissues.
+
+        :param GM: 3D numpy array of gray matter
+        :param WM: 3D numpy array of white matter
+        :param tumor_initial: 3D numpy array of initial tumor
+        :param margin: Margin to leave around the tissues
+        :param threshold: Threshold to consider as no tissue
+        :return: Cropped GM, WM, tumor_initial, and the crop coordinates
+        """
+
+        # Combining GM and WM to find the region with tissue
+        tissue_sum = GM + WM
+
+        # Finding indices where the tissue sum is greater than or equal to the threshold
+        tissue_indices = np.argwhere(tissue_sum >= threshold)
+
+        # Finding the bounding box for cropping, considering the margin
+        min_coords = np.maximum(tissue_indices.min(axis=0) - margin, 0)
+        max_coords = np.minimum(tissue_indices.max(axis=0) + margin + 1, GM.shape)
+
+        # Cropping GM, WM, and tumor_initial
+        cropped_GM = GM[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+        cropped_WM = WM[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+        cropped_tumor_initial = tumor_initial[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+
+        return cropped_GM, cropped_WM, cropped_tumor_initial, (min_coords, max_coords)
+
+    def restore_tumor(self, original_shape, tumor, crop_coords):
+        """
+        Restore the cropped tumor data back to the original resolution by filling
+        the rest of the space with empty voxels.
+
+        :param original_shape: Shape of the original GM/WM arrays
+        :param tumor: Cropped tumor 3D numpy array
+        :param crop_coords: Coordinates used for cropping (min_coords, max_coords)
+        :return: Restored tumor array with original resolution
+        """
+        restored_tumor = np.zeros(original_shape)
+        min_coords, max_coords = crop_coords
+
+        restored_tumor[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]] = tumor
+
+        return restored_tumor
+
+    def gauss_sol3d(self, x, y, z, dx,dy,dz,init_scale):
+        # Experimentally chosen
+        Dt = 5.0
+        M = 250
+        
+        # Apply scaling to the coordinates
+        x_scaled = x * dx/init_scale
+        y_scaled = y * dy/init_scale
+        z_scaled = z * dz/init_scale
+
+        gauss = M / np.power(4 * np.pi * Dt, 3/2) * np.exp(- (np.power(x_scaled, 2) + np.power(y_scaled, 2) + np.power(z_scaled, 2)) / (4 * Dt))
+        gauss = np.where(gauss > 0.1, gauss, 0)
+        gauss = np.where(gauss > 1, np.float64(1), gauss)
+        return gauss
+
+    def get_initial_configuration(self, Nx,Ny,Nz,NxT,NyT,NzT,r):
+        A =  np.zeros([Nx,Ny,Nz])
+        if r == 0:
+            A[NxT, NyT,NzT] = 1
+        else:
+            A[NxT-r:NxT+r, NyT-r:NyT+r,NzT-r:NzT+r] = 1
+        
+        return A
+
     def solve(self):
         # Unpack parameters
         Dw = self.params['Dw']
@@ -199,15 +176,15 @@ class Solver(BaseSolver):
             print(f'Number of simulation timesteps: {N_simulation_steps}')
 
         xv, yv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz), indexing='ij')
-        A = np.array(gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz,init_scale))
+        A = np.array(self.gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz,init_scale))
         col_res = np.zeros([2, Nx, Ny, Nz])
         col_res[0] = copy.deepcopy(A) #init
         
         #cropping
-        cropped_GM, cropped_WM, A, (min_coords, max_coords) = crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.5)
+        cropped_GM, cropped_WM, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sGM_low_res, sWM_low_res, A, margin=2, threshold=0.5)
         
         # Simulation code
-        D_domain = get_D(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg)
+        D_domain = self.get_D(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg)
         result = {}
         
         # Initialize time series list if needed
@@ -220,7 +197,7 @@ class Solver(BaseSolver):
 
         try:
             for t in range(N_simulation_steps):
-                A = FK_update(A, D_domain, f, dt, dx, dy, dz)
+                A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
 
                 # Record data at specified steps
                 if time_series_data is not None:
@@ -228,13 +205,13 @@ class Solver(BaseSolver):
                         time_series_data.append(copy.deepcopy(A))
 
             # Process final state
-            A = restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
+            A = self.restore_tumor(sGM_low_res.shape, A, (min_coords, max_coords))
             col_res[1] = copy.deepcopy(A)  # final
 
             # Save results in the result dictionary
             result['initial_state'] = np.array(zoom(col_res[0], extrapolate_factor, order=1))
             result['final_state'] = np.array(zoom(col_res[1], extrapolate_factor, order=1))
-            result['time_series'] = np.array([zoom(restore_tumor(sGM_low_res.shape, state, (min_coords, max_coords)), extrapolate_factor, order=1) for state in time_series_data]) if time_series_data is not None else None
+            result['time_series'] = np.array([zoom(self.restore_tumor(sGM_low_res.shape, state, (min_coords, max_coords)), extrapolate_factor, order=1) for state in time_series_data]) if time_series_data is not None else None
             result['Dw'] = Dw
             result['rho'] = f
             result['success'] = True
