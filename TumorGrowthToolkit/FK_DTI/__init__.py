@@ -1,1 +1,1 @@
-from .FK_DTI import Solver
+from .FK_DTI import FK_DTI_Solver
