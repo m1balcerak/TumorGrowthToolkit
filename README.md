@@ -7,7 +7,7 @@ Welcome to TumorGrowthToolkit, a Python package dedicated to the simulation and 
 ## Models
 - Reaction-diffusion multi-cell with a nutrient field (1: proliferative/diffusive, 2: necrotic)  (FK_2c)
 - Reaction-diffusion single cell (FK)
-  
+- Diffusion Tensor Imaging (DTI) based Fisher-Kolmogorov model (FK_DTI)
 ## Installation
 
 To use the solver, first install the package by cloning this repository and using:
