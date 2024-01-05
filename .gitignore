@@ -1,5 +1,3 @@
 dist/*
-synthetic_gens/*
 *.pyc
-*.egg-info
-dataset/RGBExample.nii.gz 
+*.egg-info 
