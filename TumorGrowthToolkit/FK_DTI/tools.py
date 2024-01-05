@@ -82,28 +82,30 @@ def get_RGB(dataFolder, dtiPath = 'DTI.nii.gz', bvalsPath = 'DTI.bval', bvecsPat
         return True
 
     return RGB
-# %% generate_example_DTI_Image
-###############################################################################
-# With the following commands we can download a dMRI dataset
-fetch_sherbrooke_3shell()
-#%%
 
-home = expanduser('~')
-dname = join(home, '.dipy', 'sherbrooke_3shell')
+if __name__ == "__main__":
+    # %% generate_example_DTI_Image
+    ###############################################################################
+    # With the following commands we can download a dMRI dataset
+    fetch_sherbrooke_3shell()
+    #%%
 
-fdwi = join(dname, 'HARDI193.nii.gz')
+    home = expanduser('~')
+    dname = join(home, '.dipy', 'sherbrooke_3shell')
 
-print(fdwi)
+    fdwi = join(dname, 'HARDI193.nii.gz')
 
-fbval = join(dname, 'HARDI193.bval')
+    print(fdwi)
 
-print(fbval)
+    fbval = join(dname, 'HARDI193.bval')
 
-fbvec = join(dname, 'HARDI193.bvec')
+    print(fbval)
 
-print(fbvec)
-# %%
-rgb = get_RGB(dname, dtiPath = 'HARDI193.nii.gz', bvalsPath = 'HARDI193.bval', bvecsPath= 'HARDI193.bvec', brainmaskPath = None, saveFolder= "./dataset", doSave = False, maskthreshold=50)
-# %%
-plt.imshow(rgb[:,:,25])
+    fbvec = join(dname, 'HARDI193.bvec')
+
+    print(fbvec)
+    # %%
+    rgb = get_RGB(dname, dtiPath = 'HARDI193.nii.gz', bvalsPath = 'HARDI193.bval', bvecsPath= 'HARDI193.bvec', brainmaskPath = None, saveFolder= "./dataset", doSave = False, maskthreshold=50)
+    # %%
+    plt.imshow(rgb[:,:,25])
 # %%
