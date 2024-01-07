@@ -40,7 +40,7 @@ def construct_command(base_output_dir, i, params):
 def main():
     np.random.seed(42000)
     base_output_dir = "synthetic_runs1T_FK_2c/synthetic1T"
-    num_iterations = 4
+    num_iterations = 16
 
     processes = []
 

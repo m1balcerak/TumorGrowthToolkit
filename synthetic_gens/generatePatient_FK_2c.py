@@ -57,6 +57,10 @@ def load_nifti_to_numpy(filepath):
     return img.get_fdata()
 
 def save_nifti(array, filename):
+    # Check if the array is of type int64 and cast to int32 if necessary
+    if array.dtype == np.int64:
+        array = array.astype(np.int32)
+
     img = nib.Nifti1Image(array, np.eye(4))
     nib.save(img, filename)
 
