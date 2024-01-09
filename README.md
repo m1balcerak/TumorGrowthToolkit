@@ -16,8 +16,14 @@ pip install -e .
 ```
 
 ## Running solvers/plotting
-
-Example usage in ```FK_2c_example.ipynb.```
+### Reaction-diffusion single cell (Fisher-Kolmogorov)
+- ```FK_example.ipynb``` (plain)
+- ```FK_exampleAtlas.ipynb``` (in example brain tissue)
+### Reaction-diffusion multi-cell with a nutrient field (1: proliferative/diffusive, 2: necrotic)  (FK_2c)
+- ```FK_2c_example.ipynb```
+### Diffusion Tensor Imaging (DTI) based Fisher-Kolmogorov model (FK_DTI)
+Here, the tumor diffusion is based on measured diffusion data (DTI) instead of the white and gray matter tissue segmentation.
+- ```FK_DTI_example.ipynb```
 
 ## Synthetic patients generator
 
