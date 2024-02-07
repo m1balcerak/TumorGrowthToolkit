@@ -12,56 +12,7 @@ import torch
 from scipy.ndimage import binary_dilation
 
 
-def elongate_tensor_along_main_axis(D, scale_factor):
-    """
-    Elongates a diffusion tensor along its main axis.
-
-    Parameters:
-    - D: A 3x3 diffusion tensor (numpy array).
-    - scale_factor: The factor by which to scale the largest eigenvalue.
-
-    Returns:
-    - D_prime: The new diffusion tensor elongated along its main axis.
-    """
-    # Perform eigen decomposition of the diffusion tensor
-    eigenvalues, eigenvectors = np.linalg.eigh(D)
-    
-    # Find the index of the largest eigenvalue
-    max_eigenvalue_index = np.argmax(eigenvalues)
-    
-    # Scale the largest eigenvalue
-    eigenvalues[max_eigenvalue_index] *= scale_factor
-    
-    # Reconstruct the diffusion tensor
-    D_prime = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
-    
-    return D_prime
-
-
 def elongate_tensor_along_main_axis_torch(tensor_array, scale_factor):
-    # Ensure input is a float tensor for eigen decomposition
-    tensor_array = tensor_array.float()
-    
-    # Compute the eigenvalues and eigenvectors for each 3x3 matrix
-    e, v = torch.linalg.eigh(tensor_array)
-    
-    # Identify the maximum eigenvalue for each matrix
-    max_eigenvalue_indices = torch.argmax(e, dim=-1, keepdim=True)
-    max_eigenvalues = torch.gather(e, -1, max_eigenvalue_indices)
-    
-    # Scale the maximum eigenvalues by the scale factor
-    scaled_max_eigenvalues = max_eigenvalues * scale_factor
-    
-    # Update the eigenvalues tensor with the scaled values
-    e_updated = e.scatter_(-1, max_eigenvalue_indices, scaled_max_eigenvalues)
-    
-    # Reconstruct the tensors from the eigenvectors and the scaled eigenvalues
-    tensor_array_prime = v @ torch.diag_embed(e_updated) @ v.transpose(-2, -1)
-    
-    return tensor_array_prime
-import torch
-
-def elongate_tensor_along_main_axis_torch_adjusted(tensor_array, scale_factor):
     tensor_array = tensor_array.float()
     e, v = torch.linalg.eigh(tensor_array)
 
@@ -98,7 +49,6 @@ def elongate_tensor_along_main_axis_torch_adjusted(tensor_array, scale_factor):
     return tensor_array_prime
 
 #%%
-# Apply a Gaussian filter for smooth transitions
 tissue = nib.load("/mnt/8tb_slot8/jonas/datasets/TGM/rgbResults/sub-tgm051_ses-preop_space-sri_dti_RGB.nii.gz").get_fdata()
 print('shape: (x, y, z, fa-diffusion) :', tissue.shape)
 
@@ -139,10 +89,10 @@ def makeXYZ_rgb_from_tensor(tensor, brainMask):
 tissueFromTensor = makeXYZ_rgb_from_tensor(tissueTensor, brainMask)
 #%%
 # Scale factor to elongate the tensor along its main axis
-scale_factor = 2#1.5 # 250000.0
+scale_factor = 0.5#1.5 # 250000.0
 
 # Apply the transformation
-tensor_array_prime = elongate_tensor_along_main_axis_torch_adjusted(torch.from_numpy(tissueTensor), scale_factor).numpy()
+tensor_array_prime = elongate_tensor_along_main_axis_torch(torch.from_numpy(tissueTensor), scale_factor).numpy()
 
 tissueFromScaledTensor = makeXYZ_rgb_from_tensor(tensor_array_prime, brainMask)
 #%%
