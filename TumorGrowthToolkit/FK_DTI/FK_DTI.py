@@ -126,7 +126,7 @@ class FK_DTI_Solver(FK_Solver):
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
 
-        Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
+        Nt = days * Dw* np.max(sRGB)/np.power((np.min([dx,dy,dz])),2)*8 + 100
         dt = days/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
