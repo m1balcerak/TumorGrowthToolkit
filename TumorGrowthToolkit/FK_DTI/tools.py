@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 
 from dipy.core.gradients import gradient_table
-from dipy.data import fetch_sherbrooke_3shell
+from dipy.data import fetch_sherbrooke_3shell, fetch_bundle_atlas_hcp842
 from dipy.io import read_bvals_bvecs
 from dipy.io.image import load_nifti, save_nifti
 
@@ -16,6 +16,8 @@ import scipy.ndimage as ndi
 from dipy.reconst.dti import fractional_anisotropy, color_fa
 
 import numpy as np
+
+import  torch
 
 
 def get_RGB(dataFolder, dtiPath = 'DTI.nii.gz', bvalsPath = 'DTI.bval', bvecsPath= 'DTI.bvec', brainmaskPath = None, saveFolder= None,doSave = True, maskthreshold = 20000):
@@ -83,11 +85,67 @@ def get_RGB(dataFolder, dtiPath = 'DTI.nii.gz', bvalsPath = 'DTI.bval', bvecsPat
 
     return RGB
 
+
+def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
+    tensor_array = torch.from_numpy(tensor_arrayNP)
+    tensor_array = tensor_array.float()
+    e, v = torch.linalg.eigh(tensor_array)
+
+    # Original sum of eigenvalues
+    original_sum = torch.sum(e, dim=-1, keepdim=True)
+
+    # Identify and scale the maximum eigenvalue
+    max_eigenvalue_indices = torch.argmax(e, dim=-1, keepdim=True)
+    max_eigenvalues = torch.gather(e, -1, max_eigenvalue_indices)
+    scaled_max_eigenvalues = max_eigenvalues * scale_factor
+    
+    # Calculate the difference introduced by scaling
+    difference = scaled_max_eigenvalues - max_eigenvalues
+
+    # Prepare to adjust the other eigenvalues to keep the sum constant
+    adjustment = difference / 2
+    mask = torch.ones_like(e, dtype=torch.bool)
+    mask.scatter_(-1, max_eigenvalue_indices, 0)  # Mask out the max eigenvalue
+
+    # Adjust the other two eigenvalues
+    e_adjusted = torch.where(mask, e - adjustment, e)
+    e_adjusted_sum = torch.sum(e_adjusted, dim=-1, keepdim=True)
+    
+    # Calculate final adjustments due to precision errors
+    final_adjustment = (original_sum - e_adjusted_sum) / 3
+    e_final = e_adjusted + torch.where(mask, final_adjustment, torch.zeros_like(final_adjustment))
+
+    # Ensure the scaled max eigenvalue is set correctly
+    e_final.scatter_(-1, max_eigenvalue_indices, scaled_max_eigenvalues)
+
+    # Reconstruct the tensor
+    tensor_array_prime = v @ torch.diag_embed(e_final) @ v.transpose(-2, -1)
+
+    return tensor_array_prime.numpy()
+
+def makeXYZ_rgb_from_tensor(tensor):
+    
+    output = np.zeros(tensor.shape[:4])
+    output[:,:,:,0] = tensor[:,:,:,0,0]
+    output[:,:,:,1] = tensor[:,:,:,1,1]
+    output[:,:,:,2] = tensor[:,:,:,2,2]
+
+    brainMask = np.max(output, axis=-1) > 0
+
+    #set the mean to 0.2 and clip at 1 for stability reasons
+    output /= np.mean(output[brainMask >0])#.flatten()[output.flatten()>0.0])
+    output *= 0.2
+    output[output>1] = 1
+    output[output<0] = 0
+
+    return output
+
 if __name__ == "__main__":
     # %% generate_example_DTI_Image
     ###############################################################################
     # With the following commands we can download a dMRI dataset
     fetch_sherbrooke_3shell()
+
     #%%
 
     home = expanduser('~')
@@ -107,5 +165,10 @@ if __name__ == "__main__":
     # %%
     rgb = get_RGB(dname, dtiPath = 'HARDI193.nii.gz', bvalsPath = 'HARDI193.bval', bvecsPath= 'HARDI193.bvec', brainmaskPath = None, saveFolder= "./dataset", doSave = False, maskthreshold=50)
     # %%
+
+    
+    atlas = fetch_bundle_atlas_hcp842()
+    tensor_eigenvalues, affine = load_nifti(atlas['fa'])
+
     plt.imshow(rgb[:,:,25])
 # %%
