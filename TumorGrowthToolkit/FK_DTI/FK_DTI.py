@@ -3,6 +3,8 @@ import numpy as np
 import copy
 from scipy.ndimage import zoom
 from ..FK.FK import Solver as FK_Solver
+from . import tools
+
 
 '''
 Forward solver DTI 
@@ -44,7 +46,7 @@ class FK_DTI_Solver(FK_Solver):
 
         return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
         
-    def crop_tissues_and_tumor(self, tissue, tumor_initial, margin=2, threshold=0.0):
+    def crop_tissues_and_tumor(self, tissue, tumor_initial, brainmask,  margin=2, threshold=0.0):
         """
         Crop Tissue and tumor_initial such that we remove the maximal amount of voxels
         where the tissue is lower than the threshold.
@@ -58,11 +60,11 @@ class FK_DTI_Solver(FK_Solver):
         """
 
         # Finding indices where the tissue sum is greater than to the threshold
-        tissue_indices = np.argwhere(tissue > threshold)
+        tissue_indices = np.argwhere(brainmask > threshold)
 
         # Finding the bounding box for cropping, considering the margin
         min_coords = np.maximum(tissue_indices.min(axis=0) - margin, 0)
-        max_coords = np.minimum(tissue_indices.max(axis=0) + margin + 1, tissue.shape)
+        max_coords = np.minimum(tissue_indices.max(axis=0) + margin + 1, brainmask.shape)
 
         # Cropping tissue and tumor_initial
         cropped_tissue = tissue[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
@@ -76,8 +78,9 @@ class FK_DTI_Solver(FK_Solver):
         # Unpack parameters
         Dw = self.params['Dw']
         f = self.params['rho']
-        
-        sRGB = self.params['rgb']
+
+        diffusionEllipsoidScaling = self.params['diffusionEllipsoidScaling']
+        print(f'diffusionEllipsoidScaling: {diffusionEllipsoidScaling}')
 
         diffusionTensorExponent = self.params.get('diffusionTensorExponent', 1) # 3 was a good value but 1 is plain linear
         diffusionTensorLinear = self.params.get('diffusionTensorLinear', 0)
@@ -95,6 +98,16 @@ class FK_DTI_Solver(FK_Solver):
         init_scale  = self.params.get('init_scale', 1.)
         time_series_solution_Nt = self.params.get('time_series_solution_Nt', None) #record timeseries, number of steps
         verbose = self.params.get('verbose', False)  
+
+        #print("debug start transform")
+        # Apply the transformation
+        tensor_array_prime = tools.elongate_tensor_along_main_axis_torch(self.params["diffusionTensors"], diffusionEllipsoidScaling)
+
+        #print("debug end transform")
+        sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime)
+        brainmask = np.max(sRGB, axis = -1) > 0
+
+        #print("debug end makeXYZ_rgb_from_tensor")
 
         # Validate input
         assert isinstance(sRGB, np.ndarray), "sRGB must be a numpy array"
@@ -138,7 +151,7 @@ class FK_DTI_Solver(FK_Solver):
         col_res[0] = copy.deepcopy(A) #init
         
         #cropping
-        cropped_RGB, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sRGB_low_res, A, margin=2, threshold=0.5)
+        cropped_RGB, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sRGB_low_res, A, brainmask, margin=2, threshold=0.5)
         
         # Simulation code
         D_domain = self.get_D_from_DTI(cropped_RGB, Dw, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
@@ -153,6 +166,7 @@ class FK_DTI_Solver(FK_Solver):
             # Using linspace to get exact steps to record, including first and last
             record_steps = np.linspace(0, N_simulation_steps - 1, time_series_solution_Nt, dtype=int)
 
+        #print("debug start simulation")
         try:
             for t in range(N_simulation_steps):
                 A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
@@ -175,8 +189,10 @@ class FK_DTI_Solver(FK_Solver):
             result['success'] = True
                     
         except Exception as e:
+            print(e)
             result['error'] = str(e)
             result['success'] = False
-
         return result
 
+
+# %%
