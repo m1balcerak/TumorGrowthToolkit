@@ -70,7 +70,7 @@ parameters = {
     'rho': rho*1.2,        # Proliferation rate
     'diffusionTensors':tissueTensor, # diffusion tissue map as shown above
     'diffusionTensorExponent': 1, # exponent for the diffusion tensor, 1.0 for linear relationship
-    'diffusionEllipsoidScaling':1,#21.713178343886213,
+    'diffusionEllipsoidScaling':2,#21.713178343886213,
     'NxT1_pct': x,    # tumor position [%]
     'NyT1_pct': y,
     'NzT1_pct': z,

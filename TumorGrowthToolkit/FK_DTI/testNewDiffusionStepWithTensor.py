@@ -57,7 +57,7 @@ dx, dy, dz = Lx / Nx, Ly / Ny, Lz / Nz  # Spatial step sizes
 dt = 0.01  # Time step
 
 # Time duration
-T = 4.0  # Total time
+T = 10.0  # Total time
 Nt = int(T / dt)  # Number of time steps
 
 # Function to generate space-dependent diffusion tensor
@@ -128,7 +128,7 @@ def diffusion_termWithCrossDiffusion(u, D, dx, dy, dz):
 
 # Time stepping loop
 for t in range(Nt):
-    u += dt * diffusion_termWithCrossDiffusion(u, D, dx, dy, dz)
+    u += dt * diffusion_term(u, D, dx, dy, dz)
 
 # Plot the final state (slicing at the middle of z-axis for visualization)
 plt.imshow(u[:, :, Nz // 2], extent=[0, Lx, 0, Ly], origin='lower')

@@ -11,43 +11,6 @@ import os
 import torch
 from scipy.ndimage import binary_dilation
 
-
-def elongate_tensor_along_main_axis_torch(tensor_array, scale_factor):
-    tensor_array = tensor_array.float()
-    e, v = torch.linalg.eigh(tensor_array)
-
-    # Original sum of eigenvalues
-    original_sum = torch.sum(e, dim=-1, keepdim=True)
-
-    # Identify and scale the maximum eigenvalue
-    max_eigenvalue_indices = torch.argmax(e, dim=-1, keepdim=True)
-    max_eigenvalues = torch.gather(e, -1, max_eigenvalue_indices)
-    scaled_max_eigenvalues = max_eigenvalues * scale_factor
-    
-    # Calculate the difference introduced by scaling
-    difference = scaled_max_eigenvalues - max_eigenvalues
-
-    # Prepare to adjust the other eigenvalues to keep the sum constant
-    adjustment = difference / 2
-    mask = torch.ones_like(e, dtype=torch.bool)
-    mask.scatter_(-1, max_eigenvalue_indices, 0)  # Mask out the max eigenvalue
-
-    # Adjust the other two eigenvalues
-    e_adjusted = torch.where(mask, e - adjustment, e)
-    e_adjusted_sum = torch.sum(e_adjusted, dim=-1, keepdim=True)
-    
-    # Calculate final adjustments due to precision errors
-    final_adjustment = (original_sum - e_adjusted_sum) / 3
-    e_final = e_adjusted + torch.where(mask, final_adjustment, torch.zeros_like(final_adjustment))
-
-    # Ensure the scaled max eigenvalue is set correctly
-    e_final.scatter_(-1, max_eigenvalue_indices, scaled_max_eigenvalues)
-
-    # Reconstruct the tensor
-    tensor_array_prime = v @ torch.diag_embed(e_final) @ v.transpose(-2, -1)
-
-    return tensor_array_prime
-
 #%%
 tissue = nib.load("/mnt/8tb_slot8/jonas/datasets/TGM/rgbResults/sub-tgm051_ses-preop_space-sri_dti_RGB.nii.gz").get_fdata()
 print('shape: (x, y, z, fa-diffusion) :', tissue.shape)
@@ -61,7 +24,7 @@ tissueTensor= nib.load("/mnt/8tb_slot8/jonas/datasets/TGM/rgbResults/sub-tgm051_
 brainMask = nib.load("/mnt/8tb_slot8/jonas/datasets/TGM/tgm/tgm051/preop/sub-tgm051_ses-preop_space-sri_brainmask.nii.gz").get_fdata()
 
 #normalize the tensor
-tissueTensor = tissueTensor/np.max(tissueTensor.flatten())
+#tissueTensor = tissueTensor/np.max(tissueTensor.flatten())
 
 affine = nib.load("/mnt/8tb_slot8/jonas/datasets/TGM/tgm/tgm051/preop/sub-tgm051_ses-preop_space-sri_seg.nii.gz").affine
 # only use diagonal elements.
@@ -71,54 +34,22 @@ CSFMask = binary_dilation(brainTissue == 1, iterations = 1)
 tissue[CSFMask] = 0
 tissueTensor[CSFMask] = 0
 #%%
-def makeXYZ_rgb_from_tensor(tensor, brainMask):
-    
-    output = np.zeros(tissue.shape)
-    output[:,:,:,0] = tensor[:,:,:,0,0]
-    output[:,:,:,1] = tensor[:,:,:,1,1]
-    output[:,:,:,2] = tensor[:,:,:,2,2]
-
-    #set the mean to 0.2 and clip at 1 for stability reasons
-    output /= np.mean(output[brainMask >0])#.flatten()[output.flatten()>0.0])
-    output *= 0.2
-    output[output>1] = 1
-    output[output<0] = 0
-
-    return output
-
-tissueFromTensor = makeXYZ_rgb_from_tensor(tissueTensor, brainMask)
-#%%
-# Scale factor to elongate the tensor along its main axis
-scale_factor = 0.5#1.5 # 250000.0
-
-# Apply the transformation
-tensor_array_prime = elongate_tensor_along_main_axis_torch(torch.from_numpy(tissueTensor), scale_factor).numpy()
-
-tissueFromScaledTensor = makeXYZ_rgb_from_tensor(tensor_array_prime, brainMask)
-#%%
-plt.title('Tensor tissue')
-plt.imshow((tissueFromTensor/np.max(tissueFromTensor))[:,:,75,:] )
+plt.imshow(brainTissue[:,:,75])
 plt.show()
-plt.title('Scaled Tensor tissue by factor: ' + str(scale_factor) )
-plt.imshow((tissueFromScaledTensor/np.max(tissueFromScaledTensor))[:,:,75,:] )
-plt.show()
-plt.title('')
-plt.hist(tissueFromTensor[brainMask>0].flatten(), bins=100, alpha=0.5, label='tissueFromTensor')
-plt.hist(tissueFromScaledTensor[brainMask>0].flatten(), bins=100, alpha=0.5, label='tissueFromScaledTensor_' + str(scale_factor))
-plt.legend(loc='upper right')
-print("sum of tissueFromTensor: ", np.sum(tissueFromTensor[brainMask>0].flatten()))
-print("sum of tissueFromScaledTensor: ", np.sum(tissueFromScaledTensor[brainMask>0].flatten()))
+plt.imshow(CSFMask[:,:,75] * 0.5)
+
 # %%
 parameters = {
-    'Dw': 0.7,          # maximum diffusion coefficient
-    'rho': 0.4,        # Proliferation rate
-    'rgb':tissueFromScaledTensor, # diffusion tissue map as shown above
+    'Dw': 0.19540936796730088,          # maximum diffusion coefficient
+    'rho': 3.432108393857487,        # Proliferation rate
+    'diffusionTensors':tissueTensor, # diffusion tissue map as shown above
     'diffusionTensorExponent': 1.0, # exponent for the diffusion tensor, 1.0 for linear relationship
-    'NxT1_pct': 0.45,    # tumor position [%]
-    'NyT1_pct': 0.32,
-    'NzT1_pct': 0.60,
+    'diffusionEllipsoidScaling': 21.713178343886213,
+    'NxT1_pct': 0.45713315234845947,    # tumor position [%]
+    'NyT1_pct': 0.3436560371780158,
+    'NzT1_pct': 0.595781739465849,
     'init_scale': 1., #scale of the initial gaussian
-    'resolution_factor': 1, #resultion scaling for calculations
+    'resolution_factor': 1.0, #resultion scaling for calculations
     'verbose': True, #printing timesteps 
     'time_series_solution_Nt': 64 # number of timesteps in the output
 }
@@ -141,7 +72,7 @@ plt.scatter(y,x, c='r')
 plt.show()
 #plt.imshow(seg[:,:,z],alpha=0.5)
 #%%
-# Run the FK_solver and plot the results
+# Run the DTI_FK_solver and plot the results
 start_time = time.time()
 fK_DTI_Solver = FK_DTI_Solver(parameters)
 result = fK_DTI_Solver.solve()
@@ -165,7 +96,7 @@ gm[CSFMask] = 0
 wm[CSFMask] = 0
 parametersFK = {
     'Dw': 0.7,          # maximum diffusion coefficient
-    'rho': 0.3,        # Proliferation rate
+    'rho': 0.1,        # Proliferation rate
     'gm' : gm,
     'wm' : wm,
     'NxT1_pct': 0.45,    # tumor position [%]
@@ -180,7 +111,7 @@ fkSolver = FK_Solver(parametersFK)
 resultFK = fkSolver.solve()
 #%%
 # Calculate the slice index
-NzT = int(parameters['NzT1_pct'] * tissue.shape[2]) +5
+NzT = int(parameters['NzT1_pct'] * tissue.shape[2]) 
 
 def plot_time_series(wm_data, time_series_data, slice_index):
     plt.figure(figsize=(24, 12))
