@@ -18,7 +18,11 @@ from dipy.reconst.dti import fractional_anisotropy, color_fa
 import numpy as np
 
 import  torch
+import gc
 
+import numpy as np
+import numpy as np
+from scipy.linalg import eigh, diagsvd
 
 def get_RGB(dataFolder, dtiPath = 'DTI.nii.gz', bvalsPath = 'DTI.bval', bvecsPath= 'DTI.bvec', brainmaskPath = None, saveFolder= None,doSave = True, maskthreshold = 20000):
     print('loading data')
@@ -85,15 +89,34 @@ def get_RGB(dataFolder, dtiPath = 'DTI.nii.gz', bvalsPath = 'DTI.bval', bvecsPat
 
     return RGB
 
+def get_tensor_from_lower6(lower6):
+    #[dxx, dxy, dyy, dxz, dyz, dzz]
+
+    tensor  = np.zeros(lower6.shape[0:3] + (3,3))#.astype(np.string_) for testing
+    print(tensor.shape)
+    tensor[..., 0, 0] = lower6[..., 0]
+    tensor[..., 1, 1] = lower6[..., 2]
+    tensor[..., 2, 2] = lower6[..., 5]
+    tensor[..., 0, 1] = lower6[..., 1]
+    tensor[..., 1, 0] = lower6[..., 1]
+    tensor[..., 0, 2] = lower6[..., 3]
+    tensor[..., 2, 0] = lower6[..., 3]
+    tensor[..., 1, 2] = lower6[..., 4]
+    tensor[..., 2, 1] = lower6[..., 4]
+
+    return tensor
+
 
 def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
+    torch.no_grad()
     tensor_array = torch.from_numpy(tensor_arrayNP)
-    tensor_array = tensor_array.float()
-    e, v = torch.linalg.eigh(tensor_array)
 
+    tensor_array = tensor_array.float()
+
+
+    e, v = torch.linalg.eigh(tensor_array)
     # Original sum of eigenvalues
     original_sum = torch.sum(e, dim=-1, keepdim=True)
-
     # Identify and scale the maximum eigenvalue
     max_eigenvalue_indices = torch.argmax(e, dim=-1, keepdim=True)
     max_eigenvalues = torch.gather(e, -1, max_eigenvalue_indices)
@@ -121,7 +144,24 @@ def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
     # Reconstruct the tensor
     tensor_array_prime = v @ torch.diag_embed(e_final) @ v.transpose(-2, -1)
 
-    return tensor_array_prime.numpy()
+    e_final_detached = e_final.detach()
+    v_detached = v.detach()
+    tensor_array_prime = tensor_array_prime.detach()
+    numpyRet = tensor_array_prime.numpy()
+
+    del tensor_array
+    del e
+    del v
+    del e_adjusted
+    del e_adjusted_sum
+    del e_final
+    del e_final_detached
+    del v_detached
+    del tensor_array_prime
+ 
+    gc.collect()
+
+    return numpyRet
 
 def makeXYZ_rgb_from_tensor(tensor):
     
@@ -132,15 +172,15 @@ def makeXYZ_rgb_from_tensor(tensor):
 
     brainMask = np.max(output, axis=-1) > 0
 
-    #set the mean to 0.2 and clip at 1 for stability reasons
+    #set the mean to 1 and clip at 10 for stability reasons
     output /= np.mean(output[brainMask >0])#.flatten()[output.flatten()>0.0])
-    output *= 0.2
-    output[output>1] = 1
+    output *= 1#0.2
+    output[output>10] = 10
     output[output<0] = 0
 
     return output
 
-if __name__ == "__main__":
+if False:# __name__ == "__main__":
     # %% generate_example_DTI_Image
     ###############################################################################
     # With the following commands we can download a dMRI dataset
