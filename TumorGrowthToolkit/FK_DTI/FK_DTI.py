@@ -74,6 +74,9 @@ class FK_DTI_Solver(FK_Solver):
     def solve(self):
 
         # Unpack parameters
+        stopping_time = self.params.get('stopping_time', 100)
+        stopping_volume = self.params.get('stopping_volume', np.inf) #mm^3
+
         Dw = self.params['Dw']
         f = self.params['rho']
         
@@ -126,8 +129,8 @@ class FK_DTI_Solver(FK_Solver):
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
 
-        Nt = days * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
-        dt = days/Nt
+        Nt = stopping_time * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
+        dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
             print(f'Number of simulation timesteps: {N_simulation_steps}')
@@ -154,14 +157,23 @@ class FK_DTI_Solver(FK_Solver):
             record_steps = np.linspace(0, N_simulation_steps - 1, time_series_solution_Nt, dtype=int)
 
         try:
+            finalTime = None
             for t in range(N_simulation_steps):
                 A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
+
+                volume = dx * dy * dz * np.sum(A)
+                if volume >= stopping_volume:
+                    finalTime = t * dt
+                    break
 
                 # Record data at specified steps
                 if time_series_data is not None:
                     if t in record_steps:
                         time_series_data.append(copy.deepcopy(A))
-
+            
+            if finalTime is None:
+                finalTime = stopping_time
+            
             # Process final state
             A = self.restore_tumor(sRGB_low_res.shape[:3], A, (min_coords, max_coords))
             col_res[1] = copy.deepcopy(A)  # final
@@ -169,10 +181,14 @@ class FK_DTI_Solver(FK_Solver):
             # Save results in the result dictionary
             result['initial_state'] = np.array(zoom(col_res[0], extrapolate_factor, order=1))
             result['final_state'] = np.array(zoom(col_res[1], extrapolate_factor, order=1))
+            result['final_time'] = finalTime
+            result['final_volume'] = volume
+            result['stopping_criteria'] = 'volume' if volume >= stopping_volume else 'time'
             result['time_series'] = np.array([zoom(self.restore_tumor(sRGB_low_res.shape[:3], state, (min_coords, max_coords)), extrapolate_factor, order=1) for state in time_series_data]) if time_series_data is not None else None
             result['Dw'] = Dw
             result['rho'] = f
             result['success'] = True
+            
                     
         except Exception as e:
             result['error'] = str(e)
