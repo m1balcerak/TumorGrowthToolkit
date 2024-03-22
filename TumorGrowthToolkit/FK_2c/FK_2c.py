@@ -133,6 +133,9 @@ class Solver(FK_Solver):
 
     def solve(self):
         # Unpack parameters
+        stopping_time = self.params.get('stopping_time', 100)
+        stopping_volume = self.params.get('stopping_volume', np.inf) #mm^3
+
         Dw = self.params['Dw']
         f = self.params['rho']
         lambda_np = self.params['lambda_np']
@@ -192,9 +195,8 @@ class Solver(FK_Solver):
         NxT1 = int(NxT1_pct * Nx)
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
-        days = 100
-        Nt = days * np.max([Dw,D_s])/np.power((np.min([dx,dy,dz])),2)*Nt_multiplier + 100
-        dt = days/Nt
+        Nt = stopping_time * np.max([Dw,D_s])/np.power((np.min([dx,dy,dz])),2)*Nt_multiplier + 100
+        dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
             print(f'Number of simulation timesteps: {N_simulation_steps}')
@@ -220,16 +222,25 @@ class Solver(FK_Solver):
             record_steps = np.linspace(0, N_simulation_steps - 1, time_series_solution_Nt, dtype=int)
 
         #try:
+        finalTime = None
         for t in range(N_simulation_steps):
             updated_states = self.FK_2c_update(cropped_states['P'], cropped_states['N'], cropped_states['S'], D_domain, f,lambda_np, sigma_np, D_s_domain, lambda_s,  dt, dx, dy, dz)
             D_domain = self.get_D_with_necro(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg, cropped_states['P'], updated_states['N'],th_necro)
             # Update states
             cropped_states.update(updated_states)
 
+            # use volume of proliferative and necrotic cells
+            volume = dx * dy * dz * np.sum(updated_states['P']) +np.sum(updated_states['N'])
+            if volume >= stopping_volume:
+                finalTime = t * dt
+                break
+
             # Record data at specified steps
             if time_series_solution_Nt is not None and t in record_steps:
                 for field in ['P', 'N', 'S']:
                     time_series_data[field].append(copy.deepcopy(cropped_states[field]))
+        if finalTime is None:
+            finalTime = stopping_time
 
         # Process final state
         for key in ['P', 'N', 'S']:
@@ -255,6 +266,9 @@ class Solver(FK_Solver):
         result['NxT1_pct'] = NxT1_pct
         result['NyT1_pct'] = NyT1_pct
         result['NzT1_pct'] = NzT1_pct
+        result['final_time'] = finalTime
+        result['final_volume'] = volume
+        result['stopping_criteria'] = 'volume' if volume >= stopping_volume else 'time'
 
         #except Exception as e:
         #    result['error'] = str(e)
