@@ -142,7 +142,7 @@ class FK_DTI_Solver(FK_Solver):
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
 
-        Nt = stopping_time * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
+        Nt = stopping_time * Dw * np.max(sRGB)/np.power((np.min([dx,dy,dz])),2)*8 + 100
         dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
@@ -174,7 +174,7 @@ class FK_DTI_Solver(FK_Solver):
             finalTime = None
             for t in range(N_simulation_steps):
                 A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
-
+                #A = np.abs(A)
                 volume = dx * dy * dz * np.sum(A)
                 if volume >= stopping_volume:
                     finalTime = t * dt
