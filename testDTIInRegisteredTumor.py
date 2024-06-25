@@ -12,14 +12,14 @@ import torch
 from scipy.ndimage import binary_dilation
 import TumorGrowthToolkit.FK_DTI.tools as tools
 
+#TODO grow to certain volume
+#TODO check right integration of Tensors...
 #%%
 tissue = nib.load("/mnt/8tb_slot8/jonas/workingDirDatasets/HCPprob/DTIAtlasSRI/sub-mni152_tissues_space-sri.nii.gz").get_fdata()
 print('shape: (x, y, z, fa-diffusion) :', tissue.shape)
 
 tissueTensorRegistered = nib.load("/mnt/8tb_slot8/jonas/workingDirDatasets/HCPprob/DTIAtlasSRI/FSL_HCP1065_tensor_1mm_space-HPC-AntsIndexSpace_SRI.nii.gz").get_fdata()[:,:,:,0,:]
 #%%
-
-
 for i in range(6):
     plt.hist(tissueTensorRegistered[:,:,:,i].flatten(), bins=100)
     print(np.mean(tissueTensorRegistered[:,:,:,i].flatten()), np.std(tissueTensorRegistered[:,:,:,i].flatten()))
@@ -60,24 +60,27 @@ tissueTensor[:,:,:,2,2] = tissueTensorRegistered[:,:,:,5]
 '''
 dw = 1
 rho = 0.2
-x = 0.45
-y = 0.40
-z = 0.60
+x = 0.70
+y = 0.48
+z = 0.30
 init_scale = 0.1
-resolution_factor = 1
+resolution_factor = 1# 0.6#1
+stoppingVolume = 25000 #10000000#100000
 parameters = {
     'Dw': dw,          # maximum diffusion coefficient
-    'rho': rho*1.2,        # Proliferation rate
+    'rho': rho,        # Proliferation rate
     'diffusionTensors':tissueTensor, # diffusion tissue map as shown above
     'diffusionTensorExponent': 1, # exponent for the diffusion tensor, 1.0 for linear relationship
-    'diffusionEllipsoidScaling':2,#21.713178343886213,
+    'diffusionEllipsoidScaling':1,#21.713178343886213,
     'NxT1_pct': x,    # tumor position [%]
     'NyT1_pct': y,
     'NzT1_pct': z,
     'init_scale': init_scale, #scale of the initial gaussian
     'resolution_factor': resolution_factor, #resultion scaling for calculations
     'verbose': True, #printing timesteps 
-    'time_series_solution_Nt': 64 # number of timesteps in the output
+    'time_series_solution_Nt': 64, # number of timesteps in the output
+    'stopping_volume': stoppingVolume,
+    'stopping_time': 100000,
 }
 
 x = int(tissue.shape[0]*parameters["NxT1_pct"])
@@ -121,7 +124,10 @@ cmap2 = matplotlib.colors.LinearSegmentedColormap.from_list('my_cmap2', ['black'
 # Calculate the slice index
 NzT = int(parameters['NzT1_pct'] * tissue.shape[2]) 
 
-def plot_time_series(wm_data, time_series_data, slice_index):
+def plot_time_series(wm_data, time_series_data, slice_index = None):
+    if slice_index is None:
+        # com
+        slice_index = int(scipy.ndimage.measurements.center_of_mass(time_series_data[-1])[2])
     plt.figure(figsize=(24, 12))
     print("Final Volume = " + str(np.sum(time_series_data[-1]/1000)))
 
@@ -139,7 +145,7 @@ def plot_time_series(wm_data, time_series_data, slice_index):
 
 gm = tissue == 2
 wm = tissue == 3
-plot_time_series(wm+0.5*gm,result['time_series'], NzT)
+plot_time_series(wm+0.5*gm,result['time_series'])
 #%% run normal FK
 gm = tissue == 2
 wm = tissue == 3
@@ -156,27 +162,39 @@ parametersFK = {
     'init_scale': init_scale, #scale of the initial gaussian
     'resolution_factor': resolution_factor, #resultion scaling for calculations
     'verbose': True, #printing timesteps 
-    'time_series_solution_Nt': 64 # number of timesteps in the output
+    'time_series_solution_Nt': 64, # number of timesteps in the output
+    'stopping_volume': stoppingVolume,
+    'stopping_time': 100000,
 }
 
 #%%
 fkSolver = FK_Solver(parametersFK)
 resultFK = fkSolver.solve()
 #%%
-
-plot_time_series(wm+gm*0.5,result['time_series'], NzT)
-plot_time_series(wm+gm*0.5,resultFK['time_series'], NzT)
+plot_time_series(wm+gm*0.5,result['time_series'], z)
+plot_time_series(wm+gm*0.5,resultFK['time_series'],z)
 #%% 
 plt.imshow(tissue[:,:,z]>0,alpha=0.5*(tissue[:,:,z]==0), cmap='gray')
 #plt.imshow(seg[:,:,z],alpha=0.5*(seg[:,:,z]>0), cmap='Greens')  
 plt.imshow(result['final_state'][:,:,z], alpha=0.5*(result['final_state'][:,:,z]>0.001), cmap = "Reds")	
+plt.colorbar()
+plt.title('Tumor DTI')
+plt.show()
+plt.imshow(tissue[:,:,z]>0,alpha=0.5*(tissue[:,:,z]==0), cmap='gray')
+#plt.imshow(seg[:,:,z],alpha=0.5*(seg[:,:,z]>0), cmap='Greens')  
+plt.imshow(resultFK['final_state'][:,:,z], alpha=0.5*(resultFK['final_state'][:,:,z]>0.001), cmap = "Reds")	
 
-plt.title('Tumor')
-
+plt.title('Tumor FK')
+plt.colorbar()
+plt.show()
+#%%
 
 path = "/mnt/8tb_slot8/jonas/workingDirDatasets/tgm/dtiFirstTests/atlas/"
 os.makedirs(path, exist_ok=True)
-nib.save(nib.Nifti1Image(result['final_state'], affine=affine), path + "resultTensor_Strength" + str(round(parameters['diffusionEllipsoidScaling'],2)).replace(".", "_") +"_x_" + str(round(parameters['NxT1_pct'] , 2) ) + ".nii.gz")
+nib.save(nib.Nifti1Image(result['final_state'], affine=affine), path + "resultTensor_Strength" + str(round(parameters['diffusionEllipsoidScaling'],2)).replace(".", "_") +"_x_" + str(round(parameters['NxT1_pct'] , 2) ) + "_stoppingVolume_" + str(stoppingVolume) + ".nii.gz")
 #save fk
-nib.save(nib.Nifti1Image(resultFK['final_state'], affine=affine), path + "resultFK"+"_x_" + str(round(parameters['NxT1_pct'] , 2) ) + ".nii.gz")
+nib.save(nib.Nifti1Image(resultFK['final_state'], affine=affine), path + "resultFK"+"_x_" + str(round(parameters['NxT1_pct'] , 2) ) + "_stoppingVolume_" + str(stoppingVolume) + ".nii.gz")
 #%%
+print("FK volume = " + str(np.sum(resultFK['final_state'])))
+print("DTI volume = " + str(np.sum(result['final_state'])))
+# %%
