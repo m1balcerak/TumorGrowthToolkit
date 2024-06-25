@@ -104,7 +104,10 @@ class FK_DTI_Solver(FK_Solver):
 
         #print("debug start transform")
         # Apply the transformation
-        tensor_array_prime = tools.elongate_tensor_along_main_axis_torch(self.params["diffusionTensors"], diffusionEllipsoidScaling)
+        if diffusionEllipsoidScaling == 1:
+            tensor_array_prime = self.params["diffusionTensors"]
+        else:
+            tensor_array_prime = tools.elongate_tensor_along_main_axis_torch(self.params["diffusionTensors"], diffusionEllipsoidScaling)
 
         #print("debug end transform")
         sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime)
@@ -120,8 +123,13 @@ class FK_DTI_Solver(FK_Solver):
         assert 0 <= NzT1_pct <= 1, "NzT1_pct must be between 0 and 1"
 
         # Interpolate tissue data to lower resolution
+        #TODO plot this...
         sRGB_low_res = zoom(sRGB, [res_factor, res_factor ,res_factor, 1] , order=1)  # Linear interpolation
-        
+        from matplotlib import pyplot as plt
+        plt.imshow(sRGB[:,:,120])
+        plt.show()
+        plt.imshow(sRGB_low_res[:,:,60])
+        plt.show()
         # Assuming sGM_low_res is already computed using scipy.ndimage.zoom
         original_shape = sRGB_low_res.shape
         new_shape =  sRGB.shape[:3]
