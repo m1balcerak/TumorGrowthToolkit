@@ -34,6 +34,9 @@ python run_gen_FK_2c.py
 ```
 Creates synthetic patients with PET images and tumor segmentations (enhancing core, necrotic core, edema).
 
+## Wishlist
+- [ ] inherit more from the base FK class. Especially the time evolution and stopping parameters.
+
 ## References
 In publications using TumorGrowthToolkit pleace cite:
 1. Balcerak, M., Ezhov, I., Karnakov, P., Litvinov, S., Koumoutsakos, P., Weidner, J., Zhang, R. Z., Lowengrub, J. S., Wiestler, B., & Menze, B. (2023). Individualizing Glioma Radiotherapy Planning by Optimization of a Data and Physics Informed Discrete Loss. arXiv preprint arXiv:2312.05063.
