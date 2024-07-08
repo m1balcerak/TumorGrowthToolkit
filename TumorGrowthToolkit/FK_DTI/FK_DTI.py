@@ -127,7 +127,9 @@ class FK_DTI_Solver(FK_Solver):
         if doPlot:
             from matplotlib import pyplot as plt
             plt.imshow(sRGB[:,:,int(NzT1_pct * sRGB.shape[2])])
+            plt.title('Original - main eigenvector')
             plt.show()
+            plt.title('Low res - main eigenvector')
             plt.imshow(sRGB_low_res[:,:,int(NzT1_pct * sRGB_low_res.shape[2])])
             plt.show()
         # Assuming sGM_low_res is already computed using scipy.ndimage.zoom

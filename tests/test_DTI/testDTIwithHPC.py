@@ -33,7 +33,6 @@ for i in range(6):
     plt.show()
 
 tissueTensor = tools.get_tensor_from_lower6(tissueTensorRegistered)
-tissueFromAtlas = tools.makeXYZ_rgb_from_tensor(tissueTensor)
 
 #%%
 CSFMask = originalTissue == 1 # binary_dilation(originalTissue == 1, iterations = 1)
@@ -54,14 +53,13 @@ rho = 0.2
 y = 0.3
 z = 0.50"""
 
-#%%
 x = 0.6
 y = 0.6
-z = 0.5
+z = 0.55
 
 init_scale = 0.1
-resolution_factor = 1# 0.6#1
-stoppingVolume = 2* 100000 #10000000#100000
+resolution_factor = 0.5# 0.6#1
+stoppingVolume =  20000 #10000000#100000
 parameters = {
     'Dw': dw,          # maximum diffusion coefficient
     'rho': rho,        # Proliferation rate
@@ -104,7 +102,7 @@ plt.show()
 # Run the DTI_FK_solver and plot the results
 start_time = time.time()
 fK_DTI_Solver = FK_DTI_Solver(parameters)
-result = fK_DTI_Solver.solve()
+result = fK_DTI_Solver.solve(doPlot=True)
 end_time = time.time()  # Store the end time
 execution_time = int(end_time - start_time)  # Calculate the difference
 

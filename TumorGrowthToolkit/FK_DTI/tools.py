@@ -17,7 +17,6 @@ from dipy.reconst.dti import fractional_anisotropy, color_fa
 
 import numpy as np
 
-import  torch
 import gc
 
 import numpy as np
@@ -108,6 +107,7 @@ def get_tensor_from_lower6(lower6):
 
 
 def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
+    import  torch
     torch.no_grad()
     tensor_array = torch.from_numpy(tensor_arrayNP)
 
