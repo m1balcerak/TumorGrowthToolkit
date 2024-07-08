@@ -73,7 +73,7 @@ class FK_DTI_Solver(FK_Solver):
 
         return cropped_tissue, cropped_tumor_initial, (min_coords, max_coords)
 
-    def solve(self):
+    def solve(self, doPlot = False):
 
         # Unpack parameters
         stopping_time = self.params.get('stopping_time', 100)
@@ -123,13 +123,13 @@ class FK_DTI_Solver(FK_Solver):
         assert 0 <= NzT1_pct <= 1, "NzT1_pct must be between 0 and 1"
 
         # Interpolate tissue data to lower resolution
-        #TODO plot this...
         sRGB_low_res = zoom(sRGB, [res_factor, res_factor ,res_factor, 1] , order=1)  # Linear interpolation
-        from matplotlib import pyplot as plt
-        plt.imshow(sRGB[:,:,120])
-        plt.show()
-        plt.imshow(sRGB_low_res[:,:,60])
-        plt.show()
+        if doPlot:
+            from matplotlib import pyplot as plt
+            plt.imshow(sRGB[:,:,int(NzT1_pct * sRGB.shape[2])])
+            plt.show()
+            plt.imshow(sRGB_low_res[:,:,int(NzT1_pct * sRGB_low_res.shape[2])])
+            plt.show()
         # Assuming sGM_low_res is already computed using scipy.ndimage.zoom
         original_shape = sRGB_low_res.shape
         new_shape =  sRGB.shape[:3]
