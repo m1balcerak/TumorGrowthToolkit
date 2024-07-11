@@ -2,6 +2,7 @@ import numpy as np
 import copy
 from scipy.ndimage import zoom
 from ..FK.FK import Solver as FK_Solver
+from scipy.ndimage import gaussian_filter
 
 class Solver(FK_Solver):
     def __init__(self, params):
@@ -118,12 +119,63 @@ class Solver(FK_Solver):
         return cropped_GM, cropped_WM, cropped_states, (min_coords, max_coords)
 
 
-    def get_initial_configuration(self, NxT,NyT,NzT,Nx,Ny,Nz,dx,dy,dz,init_scale,GM,WM,th_matter):
+    def create_spiky_tumor(self, xv, yv, zv, NxT, NyT, NzT, dx, dy, dz, init_scale):
+        np.random.seed(11)
+        
+        # Create base spherical tumor using Gaussian distribution
+        Dt = 5.0
+        M = 250
+        x_scaled = (xv - NxT) * dx / init_scale
+        y_scaled = (yv - NyT) * dy / init_scale
+        z_scaled = (zv - NzT) * dz / init_scale
+
+        tumor = M / np.power(4 * np.pi * Dt, 3 / 2) * np.exp(- (np.power(x_scaled, 2) + np.power(y_scaled, 2) + np.power(z_scaled, 2)) / (4 * Dt))
+        tumor = np.where(tumor > 0.1, tumor, 0)
+        tumor = np.where(tumor > 1, np.float64(1), tumor)
+
+        # Add random spikes
+        num_spikes = 100
+        spike_length = 15  # 10 pixels long
+        for _ in range(num_spikes):
+            # Random direction
+            theta = np.random.uniform(0, np.pi)
+            phi = np.random.uniform(0, 2 * np.pi)
+            spike_dir = np.array([np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)])
+            
+            # Random spike origin within the tumor
+            origin_r = np.random.uniform(0, init_scale)
+            origin = np.array([NxT, NyT, NzT]) + origin_r * spike_dir
+            
+            # Create spike mask
+            for i in range(spike_length):
+                spike_x = int(origin[0] + i * spike_dir[0])
+                spike_y = int(origin[1] + i * spike_dir[1])
+                spike_z = int(origin[2] + i * spike_dir[2])
+                
+                if 0 <= spike_x < xv.shape[0] and 0 <= spike_y < yv.shape[1] and 0 <= spike_z < zv.shape[2]:
+                    tumor[spike_x, spike_y, spike_z] = 1
+
+        # Normalize tumor to ensure it does not exceed 1
+        tumor = np.clip(tumor, 0, 1)
+
+        # Apply Gaussian filter for smoothing
+        sigma = 1.0  # You can adjust this value as needed
+        tumor = gaussian_filter(tumor, sigma=sigma)
+
+        return tumor
+
+
+    def get_initial_configuration(self, NxT, NyT, NzT, Nx, Ny, Nz, dx, dy, dz, init_scale, GM, WM, th_matter, spiky=False):
         xv, yv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz), indexing='ij')
-        P = np.array(self.gauss_sol3d(xv - NxT, yv - NyT, zv - NzT,dx,dy,dz,init_scale))
+        
+        if spiky:
+            P = self.create_spiky_tumor(xv, yv, zv, NxT, NyT, NzT, dx, dy, dz, init_scale)
+        else:
+            P = np.array(self.gauss_sol3d(xv - NxT, yv - NyT, zv - NzT, dx, dy, dz, init_scale))
+        
         N = np.zeros(P.shape)
         S = np.ones(P.shape)
-        #remove csf from S
+        # remove csf from S
         S = np.where(WM + GM >= th_matter, S, 0)
         
         initial_states = {'P': P, 'N': N, 'S': S}
@@ -133,7 +185,7 @@ class Solver(FK_Solver):
 
     def solve(self):
         # Unpack parameters
-        stopping_time = self.params.get('stopping_time', 100)
+        stopping_time = self.params.get('stopping_time',400)
         stopping_volume = self.params.get('stopping_volume', np.inf) #mm^3
 
         Dw = self.params['Dw']
@@ -158,7 +210,8 @@ class Solver(FK_Solver):
         init_scale  = self.params.get('init_scale', 1.)
         time_series_solution_Nt = self.params.get('time_series_solution_Nt', None) #record timeseries, number of steps
         Nt_multiplier = self.params.get('Nt_multiplier',8)
-        verbose = self.params.get('verbose', False)  
+        verbose = self.params.get('verbose', False)
+        spiky = self.params.get('spiky', False)
 
         # Validate input
         assert isinstance(sGM, np.ndarray), "sGM must be a numpy array"
@@ -202,7 +255,7 @@ class Solver(FK_Solver):
             print(f'Number of simulation timesteps: {N_simulation_steps}')
 
         # Assuming get_initial_configuration now returns a dictionary
-        initial_states = self.get_initial_configuration(NxT1, NyT1, NzT1, Nx, Ny, Nz, dx, dy, dz, init_scale, sGM_low_res, sWM_low_res, th_matter)
+        initial_states = self.get_initial_configuration(NxT1, NyT1, NzT1, Nx, Ny, Nz, dx, dy, dz, init_scale, sGM_low_res, sWM_low_res, th_matter, spiky)
 
         col_res = {'initial_state': {}, 'final_state': {}}
         col_res['initial_state'] = copy.deepcopy(initial_states)  # Store initial states
