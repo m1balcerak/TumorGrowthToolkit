@@ -111,7 +111,6 @@ class FK_DTI_Solver(FK_Solver):
 
         #print("debug end transform")
         sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime)
-        brainmask = np.max(sRGB, axis = -1) > 0
 
         #print("debug end makeXYZ_rgb_from_tensor")
 
@@ -160,10 +159,13 @@ class FK_DTI_Solver(FK_Solver):
 
         xv, yv, zv = np.meshgrid(np.arange(0, Nx), np.arange(0, Ny), np.arange(0, Nz), indexing='ij')
         A = np.array(self.gauss_sol3d(xv - NxT1, yv - NyT1, zv - NzT1,dx,dy,dz,init_scale))
+        print("init: ",A.shape, "Volume of init Tumor", np.sum(A))
         col_res = np.zeros([2, Nx, Ny, Nz])
         col_res[0] = copy.deepcopy(A) #init
         
         #cropping
+        brainmask = np.max(sRGB_low_res, axis = -1) > 0
+
         cropped_RGB, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sRGB_low_res, A, brainmask, margin=2, threshold=0.5)
         
         # Simulation code
@@ -182,12 +184,18 @@ class FK_DTI_Solver(FK_Solver):
         #print("debug start simulation")
         try:
             finalTime = None
+            result['success'] = False
             for t in range(N_simulation_steps):
                 A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
                 #A = np.abs(A)
                 volume = dx * dy * dz * np.sum(A)
                 if volume >= stopping_volume:
                     finalTime = t * dt
+                    break
+
+                if volume < 0.000001:
+                    print("Volume is to small")
+                    result['success'] = False
                     break
 
                 # Record data at specified steps
