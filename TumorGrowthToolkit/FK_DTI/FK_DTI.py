@@ -185,6 +185,11 @@ class FK_DTI_Solver(FK_Solver):
         try:
             finalTime = None
             result['success'] = False
+            
+            #check if origin within brainmask
+            if not brainmask[NxT1, NyT1, NzT1]:
+                raise ValueError("Origin not within brainmask")
+            
             for t in range(N_simulation_steps):
                 A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
                 #A = np.abs(A)
