@@ -171,6 +171,16 @@ class Solver(BaseSolver):
         NxT1 = int(NxT1_pct * Nx)
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
+
+        result = {}
+        
+        if sGM_low_res[NxT1, NyT1, NzT1] == 0 and sWM_low_res[NxT1, NyT1, NzT1] == 0:
+            result['error'] = 'Initial tumor position is outside the brain matter'
+            result['success'] = False
+            if verbose:
+                print('Initial tumor position is outside the brain matter')
+            return result
+
         Nt = stopping_time * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
         dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
@@ -187,7 +197,6 @@ class Solver(BaseSolver):
         
         # Simulation code
         D_domain = self.get_D(cropped_WM, cropped_GM, th_matter, Dw, RatioDw_Dg)
-        result = {}
         
         # Initialize time series list if needed
         time_series_data = [] if time_series_solution_Nt is not None else None
