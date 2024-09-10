@@ -151,7 +151,8 @@ class FK_DTI_Solver(FK_Solver):
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
 
-        Nt = stopping_time * Dw * np.max(sRGB)/np.power((np.min([dx,dy,dz])),2)*8 + 100
+        #stability condition \Delta t \leq \min \left( \frac{\Delta x^2}{6 D_{\text{max}}}, \frac{1}{\rho} \right)
+        Nt = np.max([stopping_time * Dw * np.max(sRGB)/np.power((np.min([dx,dy,dz])),2)*8 + 100, stopping_time * f *1.1 ]) 
         dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
@@ -231,6 +232,7 @@ class FK_DTI_Solver(FK_Solver):
             print(e)
             result['error'] = str(e)
             result['success'] = False
+
         return result
 
 

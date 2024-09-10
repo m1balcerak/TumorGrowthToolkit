@@ -195,7 +195,9 @@ class Solver(FK_Solver):
         NxT1 = int(NxT1_pct * Nx)
         NyT1 = int(NyT1_pct * Ny)
         NzT1 = int(NzT1_pct * Nz)
-        Nt = stopping_time * np.max([Dw,D_s])/np.power((np.min([dx,dy,dz])),2)*Nt_multiplier + 100
+            
+        #stability condition \Delta t \leq \min \left( \frac{\Delta x^2}{6 D_{\text{max}}}, \frac{1}{\rho} \right)
+        Nt = ([stopping_time * np.max([Dw,D_s])/np.power((np.min([dx,dy,dz])),2)*Nt_multiplier + 100, stopping_time * f * 1.1])
         dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 

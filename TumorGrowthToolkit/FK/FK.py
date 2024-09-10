@@ -181,7 +181,8 @@ class Solver(BaseSolver):
                 print('Initial tumor position is outside the brain matter')
             return result
 
-        Nt = stopping_time * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100
+        #stability condition \Delta t \leq \min \left( \frac{\Delta x^2}{6 D_{\text{max}}}, \frac{1}{\rho} \right)
+        Nt = np.max([stopping_time * Dw/np.power((np.min([dx,dy,dz])),2)*8 + 100, stopping_time * f *1.1 ]) 
         dt = stopping_time/Nt
         N_simulation_steps = int(np.ceil(Nt))
         if verbose: 
