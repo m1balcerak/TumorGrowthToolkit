@@ -22,7 +22,7 @@ class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
 
-    def get_D_from_DTI(self, dtiRGB, DwMax, exponent = 1 , maskOut=None, linear = 0):
+    def get_D_from_DTI(self, dtiRGB, DwMax, maskOut=None):
         '''
         dtiRGB: 4D array of shape (Nx,Ny,Nz,3) containing the RGB values of the DTI image
         DwMax: maximum diffusion coefficient
@@ -36,9 +36,9 @@ class FK_DTI_Solver(FK_Solver):
         if maskOut is not None:
             dtiRGB[maskOut] = 0
         
-        D_minus_x = (dtiRGB[:,:,:,0]**exponent + dtiRGB[:,:,:,0] * linear) *DwMax
-        D_minus_y = (dtiRGB[:,:,:,1]**exponent + dtiRGB[:,:,:,1] * linear) *DwMax
-        D_minus_z = (dtiRGB[:,:,:,2]**exponent + dtiRGB[:,:,:,2] * linear) *DwMax
+        D_minus_x = (dtiRGB[:,:,:,0]) *DwMax
+        D_minus_y = (dtiRGB[:,:,:,1]) *DwMax
+        D_minus_z = (dtiRGB[:,:,:,2]) *DwMax
 
         D_plus_x = D_minus_x
         D_plus_y = D_minus_y
@@ -110,7 +110,8 @@ class FK_DTI_Solver(FK_Solver):
             tensor_array_prime = tools.elongate_tensor_along_main_axis_torch(self.params["diffusionTensors"], diffusionEllipsoidScaling)
 
         #print("debug end transform")
-        sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime)
+        sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
+
 
         #print("debug end makeXYZ_rgb_from_tensor")
 
@@ -170,7 +171,7 @@ class FK_DTI_Solver(FK_Solver):
         cropped_RGB, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sRGB_low_res, A, brainmask, margin=2, threshold=0.5)
         
         # Simulation code
-        D_domain = self.get_D_from_DTI(cropped_RGB, Dw, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
+        D_domain = self.get_D_from_DTI(cropped_RGB, Dw)
 
         result = {}
         

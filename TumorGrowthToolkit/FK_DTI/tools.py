@@ -163,7 +163,7 @@ def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
 
     return numpyRet
 
-def makeXYZ_rgb_from_tensor(tensor):
+def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0):
     
     output = np.zeros(tensor.shape[:4])
     output[:,:,:,0] = tensor[:,:,:,0,0]
@@ -178,6 +178,12 @@ def makeXYZ_rgb_from_tensor(tensor):
     output[output>10] = 10
     output[output<0] = 0
 
+    output = output**exponent +  output * linear
+    
+    output /= np.mean(output[brainMask >0])#.flatten()[output.flatten()>0.0])
+    output *= 1#0.2
+    output[output>10] = 10
+    output[output<0] = 0
     return output
 
 if False:# __name__ == "__main__":
