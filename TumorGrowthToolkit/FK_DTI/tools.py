@@ -163,7 +163,7 @@ def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
 
     return numpyRet
 
-def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0):
+def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = [None], gm = [None], ratioDw_Dg = None):
     
     output = np.zeros(tensor.shape[:4])
     output[:,:,:,0] = tensor[:,:,:,0,0]
@@ -173,17 +173,30 @@ def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0):
     brainMask = np.max(output, axis=-1) > 0
 
     #set the mean to 1 and clip at 10 for stability reasons
-    output /= np.mean(output[brainMask >0])#.flatten()[output.flatten()>0.0])
-    output *= 1#0.2
+    output /= np.mean(output[brainMask >0])
     output[output>10] = 10
     output[output<0] = 0
 
     output = output**exponent +  output * linear
     
-    output /= np.mean(output[brainMask >0])#.flatten()[output.flatten()>0.0])
-    output *= 1#0.2
+    output /= np.mean(output[brainMask >0])
     output[output>10] = 10
     output[output<0] = 0
+
+    if not (wm is None or gm  is None or ratioDw_Dg is None):
+
+        print('set gm to uniform and wm to DTI')
+
+        csfMask = np.logical_and(wm <= 0, gm <= 0)
+
+        output[csfMask] = 0
+
+        # normalize DTI in wm to a mean of 1
+        output /= np.mean(output[wm >0])        
+
+        # fix gray matter
+        output[gm > 0 ] = 1 / ratioDw_Dg
+
     return output
 
 if False:# __name__ == "__main__":

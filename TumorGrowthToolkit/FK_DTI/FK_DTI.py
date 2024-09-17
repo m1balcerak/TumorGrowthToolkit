@@ -110,10 +110,15 @@ class FK_DTI_Solver(FK_Solver):
             tensor_array_prime = tools.elongate_tensor_along_main_axis_torch(self.params["diffusionTensors"], diffusionEllipsoidScaling)
 
         #print("debug end transform")
-        sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
 
+        if self.params.get('use_homogen_gm', False):
+            sGM = self.params['gm']
+            sWM = self.params['wm']
+            ratioDw_Dg = self.params.get('RatioDw_Dg', 10.)
 
-        #print("debug end makeXYZ_rgb_from_tensor")
+            sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear, wm = sWM, gm = sGM, ratioDw_Dg = ratioDw_Dg)
+        else:
+            sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
 
         # Validate input
         assert isinstance(sRGB, np.ndarray), "sRGB must be a numpy array"
