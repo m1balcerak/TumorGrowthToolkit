@@ -23,6 +23,9 @@ import numpy as np
 import numpy as np
 from scipy.linalg import eigh, diagsvd
 
+from scipy.ndimage import binary_dilation
+
+
 def get_RGB(dataFolder, dtiPath = 'DTI.nii.gz', bvalsPath = 'DTI.bval', bvecsPath= 'DTI.bvec', brainmaskPath = None, saveFolder= None,doSave = True, maskthreshold = 20000):
     print('loading data')
 
@@ -164,6 +167,8 @@ def elongate_tensor_along_main_axis_torch(tensor_arrayNP, scale_factor):
     return numpyRet
 
 def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = [None], gm = [None], ratioDw_Dg = None):
+
+    #TODO fix boundary conditions, make everything at border 0
     
     output = np.zeros(tensor.shape[:4])
     output[:,:,:,0] = tensor[:,:,:,0,0]
@@ -195,7 +200,11 @@ def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = [None], gm =
         output /= np.mean(output[wm >0])        
 
         # fix gray matter
-        output[gm > 0 ] = 1 / ratioDw_Dg
+        output[gm > 0 ] = 1.0 / ratioDw_Dg
+
+        borderMask = binary_dilation(csfMask, iterations = 1)
+
+        output[borderMask] = 0
 
     return output
 
