@@ -22,42 +22,42 @@ class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
 
-    def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = [None], gm = [None], ratioDw_Dg = None):
+    def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None, upper_limit = 2):
 
-        # TODO add variance as parameter, 
-        # put around 1 and clip at 0 and 2. # this makes the runtime only twice the runtime of the original FK model
-        
+        brainMask = np.max(output, axis=-1) > 0
+
+        if wm is not None:
+            normalizationMask = wm > 0
+        else:
+            normalizationMask = np.max(tensor, axis=-1) > 0
+
         output = np.zeros(tensor.shape[:4])
+
+        # use diagonal elements
         output[:,:,:,0] = tensor[:,:,:,0,0]
         output[:,:,:,1] = tensor[:,:,:,1,1]
         output[:,:,:,2] = tensor[:,:,:,2,2]
 
-        brainMask = np.max(output, axis=-1) > 0
 
-        #set the mean to 1 and clip at 10 for stability reasons
-        output /= np.mean(output[brainMask >0])
-        output[output>10] = 10
-        output[output<0] = 0
+        if desiredSTD is not None:
+            output[brainMask] -= np.mean(output[normalizationMask])
+            output[brainMask] /= np.std(output[normalizationMask])
+            output[brainMask] *= desiredSTD
+            output[brainMask] += 1
+        else:
+            output[brainMask] /= np.mean(output[normalizationMask])
 
-        output = output**exponent +  output * linear
+        output[brainMask] = output[brainMask]**exponent +  output[brainMask] * linear
         
-        output /= np.mean(output[brainMask >0])
-        output[output>10] = 10
-        output[output<0] = 0
-
         if not (wm is None or gm  is None or ratioDw_Dg is None):
 
             print('set gm to uniform and wm to DTI')
-
             csfMask = np.logical_and(wm <= 0, gm <= 0)
+            output[csfMask] = 0     
+            output[gm > 0 ] = 1.0 / ratioDw_Dg # fix gray matter
 
-            output[csfMask] = 0
-
-            # normalize DTI in wm to a mean of 1
-            output /= np.mean(output[wm >0])        
-
-            # fix gray matter
-            output[gm > 0 ] = 1.0 / ratioDw_Dg
+        output[output>upper_limit] = upper_limit
+        output[output<0] = 0
 
         return output
 
