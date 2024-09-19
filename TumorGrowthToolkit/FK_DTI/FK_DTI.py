@@ -5,6 +5,9 @@ from scipy.ndimage import zoom
 from ..FK.FK import Solver as FK_Solver
 from . import tools
 import scipy.ndimage
+from scipy.ndimage import binary_dilation
+import nibabel as nib
+import matplotlib.pyplot as plt
 
 '''
 Forward solver DTI 
@@ -22,15 +25,7 @@ class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
 
-    def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None, upper_limit = 2):
-
-        brainMask = np.max(output, axis=-1) > 0
-
-        if wm is not None:
-            normalizationMask = wm > 0
-        else:
-            normalizationMask = np.max(tensor, axis=-1) > 0
-
+    def makeXYZ_rgb_from_tensor(self, tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None, upper_limit = 10):
         output = np.zeros(tensor.shape[:4])
 
         # use diagonal elements
@@ -38,6 +33,19 @@ class FK_DTI_Solver(FK_Solver):
         output[:,:,:,1] = tensor[:,:,:,1,1]
         output[:,:,:,2] = tensor[:,:,:,2,2]
 
+        output[output<0] = 0
+
+        brainMask = np.max(output, axis=-1) > 0
+
+        plt.imshow(output[:,:,output.shape[2]//2] / np.max(output[:,:,output.shape[2]//2]))
+        plt.colorbar()
+        plt.title("Before")
+        plt.show()
+
+        if wm is not None:
+            normalizationMask = wm > 0
+        else:
+            normalizationMask = brainMask
 
         if desiredSTD is not None:
             output[brainMask] -= np.mean(output[normalizationMask])
@@ -48,6 +56,10 @@ class FK_DTI_Solver(FK_Solver):
             output[brainMask] /= np.mean(output[normalizationMask])
 
         output[brainMask] = output[brainMask]**exponent +  output[brainMask] * linear
+        plt.imshow(output[:,:,output.shape[2]//2])
+        plt.colorbar()
+        plt.title("Before 2")
+        plt.show()
         
         if not (wm is None or gm  is None or ratioDw_Dg is None):
 
@@ -55,9 +67,16 @@ class FK_DTI_Solver(FK_Solver):
             csfMask = np.logical_and(wm <= 0, gm <= 0)
             output[csfMask] = 0     
             output[gm > 0 ] = 1.0 / ratioDw_Dg # fix gray matter
+            borderMask = binary_dilation(csfMask, iterations = 1)
+            output[borderMask] = 0
 
         output[output>upper_limit] = upper_limit
         output[output<0] = 0
+
+        plt.imshow(output[:,:,output.shape[2]//2])
+        plt.colorbar()
+        plt.title("Before3")
+        plt.show()
 
         return output
 
@@ -65,45 +84,45 @@ class FK_DTI_Solver(FK_Solver):
         
         brainmask = np.max(rgbImg, axis = -1) > threshold
         
-        retTildas = np.zeros((3, *rgbImg.shape))
+        retTildas = np.zeros_like(rgbImg)
 
         for i in range(3):
-            retTildas[i] = (np.roll(rgbImg,-1,axis=i) + rgbImg)/2
-            retTildas[i][np.invert(brainmask)] = 0
+            retTildas[:,:,:,i] = (np.roll(rgbImg[:,:,:,i],-1,axis=i) + rgbImg[:,:,:,i])/2
+            retTildas[:,:,:,i][np.invert(brainmask)] = 0
         
         return retTildas
 
-    def get_D_from_DTI(self, dtiRGB, DwMax, maskOut=None):
+    def get_D_from_DTI(self, dtiRGB, Dw):
         '''
         dtiRGB: 4D array of shape (Nx,Ny,Nz,3) containing the RGB values of the DTI image
-        DwMax: maximum diffusion coefficient
-        
-        # monotonic function to map RGB to diffusion coefficient
-        exponent: an exponent to increase/decrease the impact of large/small RGB values
-        linear: a linear factor to make the function more or less steep
-
-        maskOut: a mask to mask out certain regions of the brain. If None, no mask is applied
+        Dw: diffusion coefficient
         '''
-        if maskOut is not None:
-            dtiRGB[maskOut] = 0
-        
-        D_minus_x = (dtiRGB[:,:,:,0]) *DwMax
-        D_minus_y = (dtiRGB[:,:,:,1]) *DwMax
-        D_minus_z = (dtiRGB[:,:,:,2]) *DwMax
+        M = self.m_Tildas(dtiRGB)
 
+        D_minus_x = M[:,:,:,0] * Dw
+        D_minus_y = M[:,:,:,1] * Dw
+        D_minus_z = M[:,:,:,2] * Dw
 
-        import matplotlib.pyplot as plt # TODO: remove
+        D_plus_x = Dw * np.roll(M[:,:,:,0],1,axis=0)
+        D_plus_y = Dw * np.roll(M[:,:,:,1],1,axis=1)
+        D_plus_z = Dw * np.roll(M[:,:,:,2],1,axis=2)
 
+        import matplotlib.pyplot as plt
         plt.imshow(D_minus_x[:,:,D_minus_x.shape[2]//2])
         plt.title("D_minus_x")
         plt.colorbar()
-
         plt.show()
 
-        #TODO this is shit: 
-        D_plus_x = D_minus_x
-        D_plus_y = D_minus_y
-        D_plus_z = D_minus_z
+        plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2])
+        plt.title("D_plus_x")
+        plt.colorbar()
+        plt.show()
+
+        plt.title("difference")
+        plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2] - D_minus_x[:,:,D_minus_x.shape[2]//2])
+        plt.colorbar()
+        plt.show()
+
 
         return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
         
@@ -177,9 +196,11 @@ class FK_DTI_Solver(FK_Solver):
             sWM = self.params['wm']
             ratioDw_Dg = self.params.get('RatioDw_Dg', 10.)
 
-            sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear, wm = sWM, gm = sGM, ratioDw_Dg = ratioDw_Dg)
+            # TODO fix tools...
+            sRGB = self.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear, wm = sWM, gm = sGM, ratioDw_Dg = ratioDw_Dg)
         else:
-            sRGB = tools.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
+            # TODO fix tools...
+            sRGB = self.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
 
         # Validate input
         assert isinstance(sRGB, np.ndarray), "sRGB must be a numpy array"
@@ -191,13 +212,20 @@ class FK_DTI_Solver(FK_Solver):
         # Interpolate tissue data to lower resolution
         sRGB_low_res = zoom(sRGB, [res_factor, res_factor ,res_factor, 1] , order=1)  # Linear interpolation
         if doPlot:
-            from matplotlib import pyplot as plt
-            plt.imshow(sRGB[:,:,int(NzT1_pct * sRGB.shape[2])])
+            from matplotlib import pyplot as plt   
+            plotSlice = sRGB[:,:,int(NzT1_pct * sRGB_low_res.shape[2])]
+            plt.imshow(plotSlice)# / np.max(plotSlice))
             plt.title('Original - main eigenvector')
             plt.show()
             plt.title('Low res - main eigenvector')
-            plt.imshow(sRGB_low_res[:,:,int(NzT1_pct * sRGB_low_res.shape[2])])
+            plotSlice = sRGB_low_res[:,:,int(NzT1_pct * sRGB_low_res.shape[2])]
+            plt.imshow(plotSlice / np.max(plotSlice))
             plt.show()
+
+            plt.hist(sRGB[sRGB >0].flatten(), bins=100)
+            plt.title('Original - larger then zero')
+            plt.show()
+            nib.save(nib.Nifti1Image(sRGB_low_res, np.eye(4)), 'sRGB_low_res.nii.gz')
         # Assuming sGM_low_res is already computed using scipy.ndimage.zoom
         original_shape = sRGB_low_res.shape
         new_shape =  sRGB.shape[:3]
