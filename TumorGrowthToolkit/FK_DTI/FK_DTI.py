@@ -4,7 +4,7 @@ import copy
 from scipy.ndimage import zoom
 from ..FK.FK import Solver as FK_Solver
 from . import tools
-
+import scipy.ndimage
 
 '''
 Forward solver DTI 
@@ -21,6 +21,57 @@ By Jonas Weidner - 2023 based on Michal Balcerak solver.
 class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
+
+    def makeXYZ_rgb_from_tensor(tensor, exponent = 1 , linear = 0, wm = [None], gm = [None], ratioDw_Dg = None):
+
+        # TODO add variance as parameter, 
+        # put around 1 and clip at 0 and 2. # this makes the runtime only twice the runtime of the original FK model
+        
+        output = np.zeros(tensor.shape[:4])
+        output[:,:,:,0] = tensor[:,:,:,0,0]
+        output[:,:,:,1] = tensor[:,:,:,1,1]
+        output[:,:,:,2] = tensor[:,:,:,2,2]
+
+        brainMask = np.max(output, axis=-1) > 0
+
+        #set the mean to 1 and clip at 10 for stability reasons
+        output /= np.mean(output[brainMask >0])
+        output[output>10] = 10
+        output[output<0] = 0
+
+        output = output**exponent +  output * linear
+        
+        output /= np.mean(output[brainMask >0])
+        output[output>10] = 10
+        output[output<0] = 0
+
+        if not (wm is None or gm  is None or ratioDw_Dg is None):
+
+            print('set gm to uniform and wm to DTI')
+
+            csfMask = np.logical_and(wm <= 0, gm <= 0)
+
+            output[csfMask] = 0
+
+            # normalize DTI in wm to a mean of 1
+            output /= np.mean(output[wm >0])        
+
+            # fix gray matter
+            output[gm > 0 ] = 1.0 / ratioDw_Dg
+
+        return output
+
+    def m_Tildas(self, rgbImg, threshold = 0):
+        
+        brainmask = np.max(rgbImg, axis = -1) > threshold
+        
+        retTildas = np.zeros((3, *rgbImg.shape))
+
+        for i in range(3):
+            retTildas[i] = (np.roll(rgbImg,-1,axis=i) + rgbImg)/2
+            retTildas[i][np.invert(brainmask)] = 0
+        
+        return retTildas
 
     def get_D_from_DTI(self, dtiRGB, DwMax, maskOut=None):
         '''
@@ -40,6 +91,16 @@ class FK_DTI_Solver(FK_Solver):
         D_minus_y = (dtiRGB[:,:,:,1]) *DwMax
         D_minus_z = (dtiRGB[:,:,:,2]) *DwMax
 
+
+        import matplotlib.pyplot as plt # TODO: remove
+
+        plt.imshow(D_minus_x[:,:,D_minus_x.shape[2]//2])
+        plt.title("D_minus_x")
+        plt.colorbar()
+
+        plt.show()
+
+        #TODO this is shit: 
         D_plus_x = D_minus_x
         D_plus_y = D_minus_y
         D_plus_z = D_minus_z
@@ -171,7 +232,7 @@ class FK_DTI_Solver(FK_Solver):
         col_res[0] = copy.deepcopy(A) #init
         
         #cropping
-        brainmask = np.max(sRGB_low_res, axis = -1) > 0
+        brainmask = np.max(sRGB_low_res, axis = -1) > 0.01
 
         cropped_RGB, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sRGB_low_res, A, brainmask, margin=2, threshold=0.5)
         
@@ -198,17 +259,40 @@ class FK_DTI_Solver(FK_Solver):
                 raise ValueError("Origin not within brainmask")
             
             for t in range(N_simulation_steps):
+                A_Old_size = np.sum(A)
+                oldA = copy.deepcopy(A)
                 A = self.FK_update(A, D_domain, f, dt, dx, dy, dz)
                 #A = np.abs(A)
                 volume = dx * dy * dz * np.sum(A)
                 if volume >= stopping_volume:
                     finalTime = t * dt
                     break
+                
+                diffA = np.sum(A) - A_Old_size
+                if  diffA < -10:
+                    print("Tumor is shrinking at time", t*dt, "by", diffA)
+                    result['success'] = False
+                    break
 
                 if volume < 0.000001:
                     print("Volume is to small")
                     result['success'] = False
                     break
+
+                if verbose and t % 1000 == 0:
+                    imshow_slice = cropped_RGB[:,:,int(NzT1_pct * A.shape[2])]
+                    imshow_slice /= np.max(imshow_slice)
+                    plt.imshow(imshow_slice)
+                    plt.imshow(A[:,:,int(NzT1_pct * A.shape[2])], alpha=0.5*(A[:,:,int(NzT1_pct * A.shape[2])]>0.001), cmap='hot', vmin=0, vmax=1)
+                    plt.show()
+                    if diffA < 0:
+                        print("Tumor is shrinking at time", t*dt, "by", diffA)
+                        #plt.imshow(imshow_slice)
+                        diffAIMG = np.abs(A - oldA)
+                        comz = scipy.ndimage.measurements.center_of_mass(diffAIMG)[2]
+                        plt.imshow(diffAIMG[:,:,int(comz)], alpha=0.5*(diffAIMG[:,:,int(comz)]>0.001), cmap='hot')
+                        plt.title("Diff")
+                        plt.show()
 
                 # Record data at specified steps
                 if time_series_data is not None:
