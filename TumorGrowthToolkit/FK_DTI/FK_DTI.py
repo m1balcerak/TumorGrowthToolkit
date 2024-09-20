@@ -37,11 +37,6 @@ class FK_DTI_Solver(FK_Solver):
 
         brainMask = np.max(output, axis=-1) > 0
 
-        plt.imshow(output[:,:,output.shape[2]//2] / np.max(output[:,:,output.shape[2]//2]))
-        plt.colorbar()
-        plt.title("Before")
-        plt.show()
-
         if wm is not None:
             normalizationMask = wm > 0
         else:
@@ -55,12 +50,6 @@ class FK_DTI_Solver(FK_Solver):
         else:
             output[brainMask] /= np.mean(output[normalizationMask])
 
-        output[brainMask] = output[brainMask]**exponent +  output[brainMask] * linear
-        plt.imshow(output[:,:,output.shape[2]//2])
-        plt.colorbar()
-        plt.title("Before 2")
-        plt.show()
-        
         if not (wm is None or gm  is None or ratioDw_Dg is None):
 
             print('set gm to uniform and wm to DTI')
@@ -73,22 +62,14 @@ class FK_DTI_Solver(FK_Solver):
         output[output>upper_limit] = upper_limit
         output[output<0] = 0
 
-        plt.imshow(output[:,:,output.shape[2]//2])
-        plt.colorbar()
-        plt.title("Before3")
-        plt.show()
-
         return output
 
-    def m_Tildas(self, rgbImg, threshold = 0):
-        
-        brainmask = np.max(rgbImg, axis = -1) > threshold
+    def m_Tildas(self, rgbImg):
         
         retTildas = np.zeros_like(rgbImg)
 
         for i in range(3):
             retTildas[:,:,:,i] = (np.roll(rgbImg[:,:,:,i],-1,axis=i) + rgbImg[:,:,:,i])/2
-            retTildas[:,:,:,i][np.invert(brainmask)] = 0
         
         return retTildas
 
@@ -119,7 +100,7 @@ class FK_DTI_Solver(FK_Solver):
         plt.show()
 
         plt.title("difference")
-        plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2] - D_minus_x[:,:,D_minus_x.shape[2]//2])
+        plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2] - D_minus_x[:,:,D_minus_x.shape[2]//2], cmap='bwr', vmin=-1, vmax=1)
         plt.colorbar()
         plt.show()
 
@@ -162,8 +143,9 @@ class FK_DTI_Solver(FK_Solver):
         Dw = self.params['Dw']
         f = self.params['rho']
 
-        diffusionEllipsoidScaling = self.params['diffusionEllipsoidScaling']
+        diffusionEllipsoidScaling = self.params.get('diffusionEllipsoidScaling', 1.)
         print(f'diffusionEllipsoidScaling: {diffusionEllipsoidScaling}')
+        desiredSTD = self.params.get('desiredSTD', None)
 
         diffusionTensorExponent = self.params.get('diffusionTensorExponent', 1) # 3 was a good value but 1 is plain linear
         diffusionTensorLinear = self.params.get('diffusionTensorLinear', 0)
@@ -197,10 +179,10 @@ class FK_DTI_Solver(FK_Solver):
             ratioDw_Dg = self.params.get('RatioDw_Dg', 10.)
 
             # TODO fix tools...
-            sRGB = self.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear, wm = sWM, gm = sGM, ratioDw_Dg = ratioDw_Dg)
+            sRGB = self.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear, wm = sWM, gm = sGM, ratioDw_Dg = ratioDw_Dg, desiredSTD = desiredSTD)
         else:
             # TODO fix tools...
-            sRGB = self.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear)
+            sRGB = self.makeXYZ_rgb_from_tensor(tensor_array_prime, exponent = diffusionTensorExponent , linear = diffusionTensorLinear, desiredSTD = desiredSTD)
 
         # Validate input
         assert isinstance(sRGB, np.ndarray), "sRGB must be a numpy array"
@@ -213,17 +195,18 @@ class FK_DTI_Solver(FK_Solver):
         sRGB_low_res = zoom(sRGB, [res_factor, res_factor ,res_factor, 1] , order=1)  # Linear interpolation
         if doPlot:
             from matplotlib import pyplot as plt   
-            plotSlice = sRGB[:,:,int(NzT1_pct * sRGB_low_res.shape[2])]
-            plt.imshow(plotSlice)# / np.max(plotSlice))
+            plotSlice = sRGB[:,:,int(NzT1_pct * sRGB.shape[2])]
+            plt.imshow(plotSlice)
             plt.title('Original - main eigenvector')
             plt.show()
             plt.title('Low res - main eigenvector')
             plotSlice = sRGB_low_res[:,:,int(NzT1_pct * sRGB_low_res.shape[2])]
-            plt.imshow(plotSlice / np.max(plotSlice))
+            plt.imshow(plotSlice)
+            plt.colorbar()
             plt.show()
 
             plt.hist(sRGB[sRGB >0].flatten(), bins=100)
-            plt.title('Original - larger then zero')
+            plt.title('low res larger then zero')
             plt.show()
             nib.save(nib.Nifti1Image(sRGB_low_res, np.eye(4)), 'sRGB_low_res.nii.gz')
         # Assuming sGM_low_res is already computed using scipy.ndimage.zoom

@@ -22,29 +22,12 @@ cmap = LinearSegmentedColormap.from_list(cmap_name, colors, N=n_bins)
 tissueSegmentationPath = "./dataset/sub-mni152_tissue-with-antsN4_space-sri.nii.gz"
 tensorPath = "./dataset/FSL_HCP1065_tensor_1mm_space-HPC-AntsIndexSpace_SRI.nii.gz"
 
-patientID = 14
-patString = ("000000" + str(patientID))[-5:]
-
-tensorPath = f"/mnt/8tb_slot8/jonas/workingDirDatasets/brats/brats_good_registerd_atlas/BraTS2021_{patString}/transformed_reoriented_tensor.nii.gz"
-tissueSegmentationPath = f"/mnt/8tb_slot8/jonas/workingDirDatasets/brats/brats_good_registerd_atlas/BraTS2021_{patString}/transformed_tissue.nii.gz"
-
 originalTissue = nib.load(tissueSegmentationPath).get_fdata()
 affine = nib.load(tissueSegmentationPath).affine
 
 #create a 3x3 tensor for each voxel
-#tissueTensor = tools.get_tensor_from_lower6(nib.load(tensorPath).get_fdata()[:,:,:,0,:])
+tissueTensor = tools.get_tensor_from_lower6(nib.load(tensorPath).get_fdata()[:,:,:,0,:])
 
-diffusionTensorsLower = nib.load(tensorPath).get_fdata()[:, :, :, 0, :]
-diffusionTensors = tools.get_tensor_from_lower6(diffusionTensorsLower)
-
-
-#%%
-i,j = 1,2#0,1
-plt.imshow(tissueTensor[:,:,75,j,i])
-plt.title(f"({j},{i})")
-plt.colorbar()
-plt.show()
-#%%
 
 CSFMask = originalTissue == 1 # binary_dilation(originalTissue == 1, iterations = 1)
 
@@ -63,7 +46,7 @@ gm, wm = gm * 1.0, wm * 1.0
 
 # %%
 
-dw = 0.1
+dw = 1
 rho = 0.5#2
 #ventricle
 """x = 0.6
@@ -74,16 +57,16 @@ y = 0.38
 z = 0.7
 
 init_scale = 0.1#0.1
-resolution_factor = 0.5# 0.6#1
-stoppingVolume =  250500
+resolution_factor = 1# 0.6#1
+stoppingVolume =  120500
 stoppingTime = 1100000
-ratioDW_Dg = 1
+ratioDW_Dg = 10
 parameters = {
     'Dw': dw,          # maximum diffusion coefficient
     'rho': rho,        # Proliferation rate
     'diffusionTensors':tissueTensor, # diffusion tissue map as shown above
     'diffusionTensorExponent': 1, # exponent for the diffusion tensor, 1.0 for linear relationship
-    'diffusionEllipsoidScaling':0,#21.713178343886213,
+    'diffusionEllipsoidScaling':1,#21.713178343886213,
     'NxT1_pct': x,    # tumor position [%]
     'NyT1_pct': y,
     'NzT1_pct': z,
@@ -97,6 +80,7 @@ parameters = {
     'gm' : gm * 1.0,
     'wm' : wm * 1.0,
     "RatioDw_Dg" : ratioDW_Dg,
+    "desiredSTD" : 0 #0.5#1
 }
 
 x = int(tissue.shape[0]*parameters["NxT1_pct"])
@@ -150,7 +134,7 @@ parametersFK = {
 fkSolver = FK_Solver(parametersFK)
 resultFK = fkSolver.solve()
 
-# %%
+#%%
 plt.imshow(tissue[:,:,z], cmap='gray')
 plt.imshow(result['final_state'][:,:,z], alpha=0.5*(result['final_state'][:,:,z]>0.0001), cmap = "Reds", vmin=0, vmax=1)	
 plt.colorbar()
@@ -158,13 +142,18 @@ plt.title('Tumor DTI')
 plt.show()
 plt.imshow(tissue[:,:,z], cmap='gray')
 plt.imshow(resultFK['final_state'][:,:,z], alpha=0.5*(resultFK['final_state'][:,:,z]>0.0001), cmap = "Reds", vmin=0, vmax=1)	
-
 plt.title('Tumor FK')
 plt.colorbar()
 plt.show()
-# %% show difference
-plt.imshow(result['final_state'][:,:,z] - resultFK['final_state'][:,:,z], cmap='bwr')
+plt.imshow((result['final_state']- resultFK['final_state'])[:,:,z], cmap='bwr', vmin=-1, vmax=1)
+print("sum difference: ", np.sum(np.abs(result['final_state'] - resultFK['final_state'])))
 plt.colorbar()
-# %%
+# %% save DTI
+nii = nib.Nifti1Image(result['final_state'], affine)
+nib.save(nii, "DTI.nii")
+# %% save FK
+nii = nib.Nifti1Image(resultFK['final_state'], affine)
+nib.save(nii, "FK.nii")
+
 
 # %%
