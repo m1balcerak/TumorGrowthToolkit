@@ -25,7 +25,7 @@ class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
 
-    def makeXYZ_rgb_from_tensor(self, tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None, upper_limit = 10):
+    def makeXYZ_rgb_from_tensor(self, tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None, upper_limit = 2):
         output = np.zeros(tensor.shape[:4])
 
         # use diagonal elements
@@ -59,6 +59,8 @@ class FK_DTI_Solver(FK_Solver):
             borderMask = binary_dilation(csfMask, iterations = 1)
             output[borderMask] = 0
 
+        output = output ** exponent + linear * output
+
         output[output>upper_limit] = upper_limit
         output[output<0] = 0
 
@@ -88,21 +90,22 @@ class FK_DTI_Solver(FK_Solver):
         D_plus_y = Dw * np.roll(M[:,:,:,1],1,axis=1)
         D_plus_z = Dw * np.roll(M[:,:,:,2],1,axis=2)
 
-        import matplotlib.pyplot as plt
-        plt.imshow(D_minus_x[:,:,D_minus_x.shape[2]//2])
-        plt.title("D_minus_x")
-        plt.colorbar()
-        plt.show()
+        if self.doPlot:
+            import matplotlib.pyplot as plt
+            plt.imshow(D_minus_x[:,:,D_minus_x.shape[2]//2])
+            plt.title("D_minus_x")
+            plt.colorbar()
+            plt.show()
 
-        plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2])
-        plt.title("D_plus_x")
-        plt.colorbar()
-        plt.show()
+            plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2])
+            plt.title("D_plus_x")
+            plt.colorbar()
+            plt.show()
 
-        plt.title("difference")
-        plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2] - D_minus_x[:,:,D_minus_x.shape[2]//2], cmap='bwr', vmin=-1, vmax=1)
-        plt.colorbar()
-        plt.show()
+            plt.title("difference")
+            plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2] - D_minus_x[:,:,D_minus_x.shape[2]//2], cmap='bwr', vmin=-1, vmax=1)
+            plt.colorbar()
+            plt.show()
 
 
         return {"D_minus_x": D_minus_x, "D_minus_y": D_minus_y, "D_minus_z": D_minus_z,"D_plus_x": D_plus_x, "D_plus_y": D_plus_y, "D_plus_z": D_plus_z}
@@ -135,6 +138,11 @@ class FK_DTI_Solver(FK_Solver):
         return cropped_tissue, cropped_tumor_initial, (min_coords, max_coords)
 
     def solve(self, doPlot = False):
+
+        if doPlot:
+            self.doPlot = True
+        else:
+            self.doPlot = False
 
         # Unpack parameters
         stopping_time = self.params.get('stopping_time', 100)
@@ -193,6 +201,10 @@ class FK_DTI_Solver(FK_Solver):
 
         # Interpolate tissue data to lower resolution
         sRGB_low_res = zoom(sRGB, [res_factor, res_factor ,res_factor, 1] , order=1)  # Linear interpolation
+        brainmask_low_res = zoom(np.max(sRGB_low_res, axis=-1) > 0.000001, res_factor, order=0)  # Nearest neighbor interpolation
+        sRGB_low_res[sRGB_low_res <= 0] = 0
+
+
         if doPlot:
             from matplotlib import pyplot as plt   
             plotSlice = sRGB[:,:,int(NzT1_pct * sRGB.shape[2])]
@@ -243,7 +255,7 @@ class FK_DTI_Solver(FK_Solver):
         col_res[0] = copy.deepcopy(A) #init
         
         #cropping
-        brainmask = np.max(sRGB_low_res, axis = -1) > 0.01
+        brainmask = np.max(sRGB_low_res, axis = -1) > 0.00001
 
         cropped_RGB, A, (min_coords, max_coords) = self.crop_tissues_and_tumor(sRGB_low_res, A, brainmask, margin=2, threshold=0.5)
         
