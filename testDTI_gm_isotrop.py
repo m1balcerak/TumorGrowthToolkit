@@ -44,21 +44,23 @@ gm[CSFMask] = 0
 wm[CSFMask] = 0
 gm, wm = gm * 1.0, wm * 1.0
 
+tissue[wm + gm <= 0] = 0
+
 # %%
 
-dw = 1
-rho = 0.5#2
+dw = 3
+rho = 0.6#2
 #ventricle
 """x = 0.6
 y = 0.3
 z = 0.50"""
-x = 0.40
-y = 0.38
-z = 0.7
+Nx = 0.45
+Ny = 0.35
+Nz = 0.55
 
 init_scale = 0.1#0.1
-resolution_factor = 1# 0.6#1
-stoppingVolume =  120500
+resolution_factor = 0.5# 0.6#1
+stoppingVolume =  90500
 stoppingTime = 1100000
 ratioDW_Dg = 10
 parameters = {
@@ -67,9 +69,9 @@ parameters = {
     'diffusionTensors':tissueTensor, # diffusion tissue map as shown above
     'diffusionTensorExponent': 1, # exponent for the diffusion tensor, 1.0 for linear relationship
     'diffusionEllipsoidScaling':1,#21.713178343886213,
-    'NxT1_pct': x,    # tumor position [%]
-    'NyT1_pct': y,
-    'NzT1_pct': z,
+    'NxT1_pct': Nx,    # tumor position [%]
+    'NyT1_pct': Ny,
+    'NzT1_pct': Nz,
     'init_scale': init_scale, #scale of the initial gaussian
     'resolution_factor': resolution_factor, #resultion scaling for calculations
     'verbose': False, #printing timesteps 
@@ -80,7 +82,8 @@ parameters = {
     'gm' : gm * 1.0,
     'wm' : wm * 1.0,
     "RatioDw_Dg" : ratioDW_Dg,
-    "desiredSTD" : 0 #0.5#1
+    "desiredSTD" : 1,#1#0.5 #0.5#1
+    "relative_upper_limit_DTI":2# #TODO
 }
 
 x = int(tissue.shape[0]*parameters["NxT1_pct"])
@@ -116,22 +119,27 @@ plt.show()
 parametersFK = {
     'Dw': dw,          # maximum diffusion coefficient
     'rho': rho,        # Proliferation rate
-    'gm' : gm * 1.0,
-    'wm' : wm * 1.0,
-    'NxT1_pct': parameters["NxT1_pct"],    # tumor position [%]
-    'NyT1_pct': parameters["NyT1_pct"],
-    'NzT1_pct': parameters["NzT1_pct"],
+    'diffusionTensors':tissueTensor, # diffusion tissue map as shown above
+    'diffusionTensorExponent': 1, # exponent for the diffusion tensor, 1.0 for linear relationship
+    'diffusionEllipsoidScaling':1,#21.713178343886213,
+    'NxT1_pct': Nx,    # tumor position [%]
+    'NyT1_pct': Ny,
+    'NzT1_pct': Nz,
     'init_scale': init_scale, #scale of the initial gaussian
     'resolution_factor': resolution_factor, #resultion scaling for calculations
-    'verbose': True, #printing timesteps 
+    'verbose': False, #printing timesteps 
     'time_series_solution_Nt': 64, # number of timesteps in the output
     'stopping_volume': stoppingVolume,
     'stopping_time': stoppingTime,
-    "RatioDw_Dg" : ratioDW_Dg
+    "use_homogen_gm": True,
+    'gm' : gm * 1.0,
+    'wm' : wm * 1.0,
+    "RatioDw_Dg" : ratioDW_Dg,
+    "desiredSTD" : 0 # must  stay 0 for FK!
 }
 
 
-fkSolver = FK_Solver(parametersFK)
+fkSolver = FK_DTI_Solver(parametersFK)
 resultFK = fkSolver.solve()
 
 #%%
@@ -148,6 +156,23 @@ plt.show()
 plt.imshow((result['final_state']- resultFK['final_state'])[:,:,z], cmap='bwr', vmin=-1, vmax=1)
 print("sum difference: ", np.sum(np.abs(result['final_state'] - resultFK['final_state'])))
 plt.colorbar()
+
+#%% plot y 
+plt.imshow(tissue[:,y,:], cmap='gray')
+plt.imshow(result['final_state'][:,y,:], alpha=0.5*(result['final_state'][:,y,:]>0.0001), cmap = "Reds", vmin=0, vmax=1)
+
+plt.colorbar()
+plt.title('Tumor DTI')
+plt.show()
+plt.imshow(tissue[:,y,:], cmap='gray')
+plt.imshow(resultFK['final_state'][:,y,:], alpha=0.5*(resultFK['final_state'][:,y,:]>0.0001), cmap = "Reds", vmin=0, vmax=1)
+plt.title('Tumor FK')
+plt.colorbar()
+plt.show()
+plt.imshow((result['final_state'][:,y,:] - resultFK['final_state'][:,y,:]), cmap='bwr', vmin=-1, vmax=1)
+print("sum difference: ", np.sum(np.abs(result['final_state'] - resultFK['final_state'])))
+plt.colorbar()
+
 # %% save DTI
 nii = nib.Nifti1Image(result['final_state'], affine)
 nib.save(nii, "DTI.nii")

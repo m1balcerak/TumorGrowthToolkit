@@ -25,7 +25,9 @@ class FK_DTI_Solver(FK_Solver):
     def __init__(self, params):
         super().__init__(params)
 
-    def makeXYZ_rgb_from_tensor(self, tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None, upper_limit = 2):
+    def makeXYZ_rgb_from_tensor(self, tensor, exponent = 1 , linear = 0, wm = None, gm = None, ratioDw_Dg = None, desiredSTD = None):
+
+        upper_limit = self.params.get('relative_upper_limit_DTI', 2)
         output = np.zeros(tensor.shape[:4])
 
         # use diagonal elements
@@ -54,11 +56,15 @@ class FK_DTI_Solver(FK_Solver):
 
             print('set gm to uniform and wm to DTI')
             csfMask = np.logical_and(wm <= 0, gm <= 0)
-            output[csfMask] = 0     
-            output[gm > 0 ] = 1.0 / ratioDw_Dg # fix gray matter
+            output[csfMask] = 0 
+            gmThreshold =   1.0 / ratioDw_Dg  
+            output[gm > 0 ] = gmThreshold # fix gray matter
             borderMask = binary_dilation(csfMask, iterations = 1)
             output[borderMask] = 0
+            #clip wm to lowest gm
+            output[np.logical_and(np.repeat((wm > 0)[..., np.newaxis], repeats=3, axis=-1), output < gmThreshold)] = gmThreshold
 
+        output[output<0] = 0
         output = output ** exponent + linear * output
 
         output[output>upper_limit] = upper_limit
@@ -101,6 +107,15 @@ class FK_DTI_Solver(FK_Solver):
             plt.title("D_plus_x")
             plt.colorbar()
             plt.show()
+
+            plotSliceAsRGB = np.zeros((D_minus_x.shape[0], D_minus_x.shape[1], 3))
+            plotSliceAsRGB[:,:,0] = D_minus_x[:,:,D_minus_x.shape[2]//2]
+            plotSliceAsRGB[:,:,1] = D_minus_y[:,:,D_plus_x.shape[2]//2]
+            plotSliceAsRGB[:,:,2] = D_minus_z[:,:,D_plus_x.shape[2]//2]
+            plt.imshow(plotSliceAsRGB/np.max(plotSliceAsRGB))
+            plt.title("D_rgb_minus")
+            plt.show()
+
 
             plt.title("difference")
             plt.imshow(D_plus_x[:,:,D_plus_x.shape[2]//2] - D_minus_x[:,:,D_minus_x.shape[2]//2], cmap='bwr', vmin=-1, vmax=1)
